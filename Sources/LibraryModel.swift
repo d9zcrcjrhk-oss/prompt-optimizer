@@ -143,4 +143,8 @@ final class LibraryModel: ObservableObject {
         importMessage = "已清空外部导入"
         scan()
     }
+
+    func queue(for t: Track) -> [Track] {
+        collections.first { $0.name == t.collection }?.tracks ?? [t]
+    }
 }
