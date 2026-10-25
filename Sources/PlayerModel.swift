@@ -90,13 +90,17 @@ final class PlayerModel: ObservableObject {
 
     func next() {
         guard !queue.isEmpty else { return }
-        if index + 1 < queue.count {
-            index += 1
-            load(queue[index])
-        } else {
-            player?.pause()
-            isPlaying = false
+        var i = index + 1
+        while i < queue.count {
+            if FileManager.default.fileExists(atPath: queue[i].url.path) {
+                index = i
+                load(queue[i])
+                return
+            }
+            i += 1
         }
+        player?.pause()
+        isPlaying = false
     }
 
     func prev() {
@@ -105,12 +109,16 @@ final class PlayerModel: ObservableObject {
             seek(to: 0)
             return
         }
-        if index > 0 {
-            index -= 1
-            load(queue[index])
-        } else {
-            seek(to: 0)
+        var i = index - 1
+        while i >= 0 {
+            if FileManager.default.fileExists(atPath: queue[i].url.path) {
+                index = i
+                load(queue[i])
+                return
+            }
+            i -= 1
         }
+        seek(to: 0)
     }
 
     func seek(to seconds: Double) {
