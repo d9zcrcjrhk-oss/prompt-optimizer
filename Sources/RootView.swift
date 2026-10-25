@@ -20,6 +20,7 @@ struct HomeView: View {
     @EnvironmentObject var library: LibraryModel
     @State private var sheet: HomeSheet?
     @State private var showFolderImport = false
+    @State private var showFileImport = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -91,9 +92,16 @@ struct HomeView: View {
                     .padding(.horizontal, 20)
 
                     Button {
+                        showFileImport = true
+                    } label: {
+                        Label("选择音频文件（U 盘/文件，可多选，不复制）", systemImage: "music.note.list")
+                    }
+                    .padding(.horizontal, 20)
+
+                    Button {
                         showFolderImport = true
                     } label: {
-                        Label("从 U 盘 / 文件 直接导入（不复制）", systemImage: "externaldrive.badge.plus")
+                        Label("从 U 盘 / 文件 选择文件夹（不复制）", systemImage: "externaldrive.badge.plus")
                     }
                     .padding(.horizontal, 20)
 
@@ -103,6 +111,13 @@ struct HomeView: View {
                         Label("清空外部导入", systemImage: "xmark.circle")
                     }
                     .padding(.horizontal, 20)
+
+                    if !library.importStatus.isEmpty {
+                        Text(library.importStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
+                    }
                 }
                 .padding(.top, 10)
                 .padding(.bottom, 30)
@@ -115,6 +130,18 @@ struct HomeView: View {
                     RenameSheet(collection: c).environmentObject(library)
                 case .cover(let c):
                     CoverSheet(collection: c).environmentObject(library)
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImport,
+                allowedContentTypes: [.audio],
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    library.importFiles(urls)
+                case .failure:
+                    break
                 }
             }
             .fileImporter(

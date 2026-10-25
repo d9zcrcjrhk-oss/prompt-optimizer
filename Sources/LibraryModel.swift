@@ -38,6 +38,7 @@ final class LibraryModel: ObservableObject {
     @Published var collections: [Collection] = []
     @Published var lastTrack: Track?
     @Published var coverRevision = 0
+    @Published var importStatus = ""
 
     private var nameOverrides: [String: String] = [:]
 
@@ -49,6 +50,10 @@ final class LibraryModel: ObservableObject {
 
     private func folderBookmarks() -> [Data] {
         (UserDefaults.standard.array(forKey: "importedFolderBookmarks") as? [Data]) ?? []
+    }
+
+    private func fileBookmarks() -> [Data] {
+        (UserDefaults.standard.array(forKey: "importedFileBookmarks") as? [Data]) ?? []
     }
 
     private var coversDir: URL {
@@ -90,7 +95,7 @@ final class LibraryModel: ObservableObject {
             }
         }
 
-        // B. 导入的文件夹（U盘 / 文件，security-scoped，不复制）
+        // B. 导入的文件夹（security-scoped，不复制）
         for data in folderBookmarks() {
             var stale = false
             guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { continue }
@@ -104,6 +109,18 @@ final class LibraryModel: ObservableObject {
                     groups[key, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collectionKey: key))
                 }
             }
+        }
+
+        // C. 导入的单个音频文件（U 盘/文件，security-scoped，不复制）
+        for data in fileBookmarks() {
+            var stale = false
+            guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { continue }
+            guard url.startAccessingSecurityScopedResource() else { continue }
+            let parent = url.deletingLastPathComponent().lastPathComponent
+            let pname = parent.isEmpty ? "外部文件" : parent
+            let key = "file:" + pname
+            defaultNames[key] = pname
+            groups[key, default: []].append(Track(url: url, name: url.deletingPathExtension().lastPathComponent, collectionKey: key))
         }
 
         collections = groups.keys.sorted().map { key in
@@ -165,16 +182,42 @@ final class LibraryModel: ObservableObject {
     }
 
     func importFolder(_ url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
-        guard let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else { return }
+        guard url.startAccessingSecurityScopedResource() else {
+            importStatus = "无法访问该文件夹"
+            return
+        }
+        guard let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else {
+            importStatus = "无法创建书签"
+            return
+        }
         var arr = folderBookmarks()
         if !arr.contains(data) { arr.append(data) }
         UserDefaults.standard.set(arr, forKey: "importedFolderBookmarks")
+        importStatus = "已导入文件夹：\(url.lastPathComponent)"
+        scan()
+    }
+
+    func importFiles(_ urls: [URL]) {
+        var arr = fileBookmarks()
+        var n = 0
+        for url in urls {
+            guard url.startAccessingSecurityScopedResource() else { continue }
+            if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+                if !arr.contains(data) {
+                    arr.append(data)
+                    n += 1
+                }
+            }
+        }
+        UserDefaults.standard.set(arr, forKey: "importedFileBookmarks")
+        importStatus = "已导入 \(n) 个音频（直接读，不复制）"
         scan()
     }
 
     func clearImports() {
         UserDefaults.standard.removeObject(forKey: "importedFolderBookmarks")
+        UserDefaults.standard.removeObject(forKey: "importedFileBookmarks")
+        importStatus = "已清空外部导入"
         scan()
     }
 }
