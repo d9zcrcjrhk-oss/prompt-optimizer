@@ -60,6 +60,7 @@ struct NowPlayingView: View {
             case .tools:
                 PlayerToolsSheet()
                     .environmentObject(player)
+                    .environmentObject(library)
             case .episodes:
                 if let c = collection {
                     EpisodeSheet(collection: c)
@@ -372,50 +373,41 @@ struct NowPlayingView: View {
 
 struct PlayerToolsSheet: View {
     @EnvironmentObject var player: PlayerModel
+    @EnvironmentObject var library: LibraryModel
     @Environment(\.dismiss) private var dismiss
-    @State private var sleepMode = 0
-    @State private var sleepMinutes = 30
-    @State private var sleepEpisodes = 3
+
+    private var collection: Collection? {
+        library.collection(forKey: player.currentCollectionKey)
+    }
+
+    private var coverImage: UIImage? {
+        guard let c = collection, let path = library.coverURL(for: c)?.path else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
+    private var firstChar: String {
+        guard let c = collection else { return "♪" }
+        return String(c.name.prefix(1))
+    }
+
+    private let rateOptions: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
+    private let minuteOptions: [Int] = [15, 30, 45, 60]
+    private let episodeOptions: [Int] = [1, 2, 3, 5]
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("倍速") {
-                    Picker("倍速", selection: Binding(
-                        get: { player.rate },
-                        set: { player.setRate($0) }
-                    )) {
-                        Text("0.75×").tag(Float(0.75))
-                        Text("1×").tag(Float(1.0))
-                        Text("1.25×").tag(Float(1.25))
-                        Text("1.5×").tag(Float(1.5))
-                        Text("2×").tag(Float(2.0))
-                    }
-                    .pickerStyle(.segmented)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    trackCard
+                    speedSection
+                    sleepSection
+                    hintCard
                 }
-
-                Section("定时关闭") {
-                    Picker("模式", selection: $sleepMode) {
-                        Text("关闭").tag(0)
-                        Text("按时间").tag(1)
-                        Text("按集数").tag(2)
-                    }
-                    .pickerStyle(.segmented)
-
-                    if sleepMode == 1 {
-                        Stepper("\(sleepMinutes) 分钟后停止", value: $sleepMinutes, in: 1...180)
-                        Button("开始计时") { player.setSleepTime(sleepMinutes) }
-                    } else if sleepMode == 2 {
-                        Stepper("播完 \(sleepEpisodes) 集后停止", value: $sleepEpisodes, in: 1...50)
-                        Button("开始计时") { player.setSleepEpisodes(sleepEpisodes) }
-                    }
-
-                    if player.sleepMode != .none {
-                        Text(sleepStatus).foregroundStyle(Theme.accent)
-                        Button("取消定时", role: .destructive) { player.cancelSleep() }
-                    }
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 34)
             }
+            .background(Color.black)
             .navigationTitle("播放设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -428,12 +420,187 @@ struct PlayerToolsSheet: View {
         .tint(Theme.accent)
     }
 
-    private var sleepStatus: String {
+    private var trackCard: some View {
+        HStack(spacing: 12) {
+            coverThumb
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(player.title.isEmpty ? "未播放" : player.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(collection?.name ?? "—")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                player.toggle()
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color.white.opacity(0.08)))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .glassCard(cornerRadius: 18)
+    }
+
+    private var speedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("倍速")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+
+            HStack(spacing: 8) {
+                ForEach(rateOptions, id: \.self) { r in
+                    Button {
+                        player.setRate(r)
+                    } label: {
+                        Text(rateLabel(r))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(player.rate == r
+                                          ? AnyShapeStyle(Theme.accentGradient)
+                                          : AnyShapeStyle(Color.white.opacity(0.08)))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var sleepSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("定时关闭")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+
+            HStack(spacing: 8) {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.accent)
+                Text(sleepStatusText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white)
+                Spacer()
+                if player.sleepMode != .none {
+                    Button("取消") { player.cancelSleep() }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .padding(12)
+            .glassCard(cornerRadius: 14)
+
+            Text("按时间")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+            HStack(spacing: 8) {
+                ForEach(minuteOptions, id: \.self) { m in
+                    Button {
+                        player.setSleepTime(m)
+                    } label: {
+                        Text("\(m)分")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .background(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Text("按集数")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+            HStack(spacing: 8) {
+                ForEach(episodeOptions, id: \.self) { n in
+                    Button {
+                        player.setSleepEpisodes(n)
+                    } label: {
+                        Text("\(n)集")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 38)
+                            .background(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var hintCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("小提示", systemImage: "lightbulb.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+            Text("定时关闭会在设定时间或集数后自动暂停播放，适合睡前收听。")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.45))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassCard(cornerRadius: 14)
+    }
+
+    private var coverThumb: some View {
+        Group {
+            if let ui = coverImage {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Theme.coverGradient(for: player.currentCollectionKey)
+                    Text(firstChar)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+            }
+        }
+    }
+
+    private func rateLabel(_ r: Float) -> String {
+        if r == 1.0 { return "1×" }
+        if r == 1.25 { return "1.25×" }
+        if r == 1.5 { return "1.5×" }
+        if r == 0.75 { return "0.75×" }
+        return "2×"
+    }
+
+    private var sleepStatusText: String {
         switch player.sleepMode {
         case .none:
-            return ""
+            return "未开启"
         case .time:
-            return "剩余 \(player.sleepRemaining) 秒"
+            return "还剩 \(fmt(Double(player.sleepRemaining)))"
         case .episodes:
             return "再播 \(player.sleepRemaining) 集"
         }
