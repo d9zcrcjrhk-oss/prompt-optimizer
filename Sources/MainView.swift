@@ -8,6 +8,7 @@ enum MainTab {
 
 struct MainView: View {
     @State private var tab: MainTab = .home
+    @State private var showSettings = false
     @EnvironmentObject var player: PlayerModel
 
     var body: some View {
@@ -34,13 +35,18 @@ struct MainView: View {
                             tab = .playing
                         }
                     }
-                    FloatingTabBar(tab: $tab)
+                    FloatingTabBar(tab: $tab) {
+                        showSettings = true
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 4)
             }
         }
         .tint(Theme.accent)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
     }
 }
 
@@ -92,6 +98,7 @@ struct NowPlayingBackdrop: View {
 /// 悬浮玻璃底栏（Apple Music 风格）
 struct FloatingTabBar: View {
     @Binding var tab: MainTab
+    let onSettings: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
@@ -106,8 +113,8 @@ struct FloatingTabBar: View {
             }
             .frame(maxWidth: .infinity)
 
-            item("square.and.arrow.down", "导入", active: false) {
-                openFilesApp()
+            item("gearshape.fill", "设置", active: false) {
+                onSettings()
             }
         }
         .padding(.horizontal, 8)
@@ -215,6 +222,41 @@ struct MiniPlayerBar: View {
 func openFilesApp() {
     if let url = URL(string: "shareddocuments://") {
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+}
+
+struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("关于") {
+                    HStack {
+                        Text("版本")
+                        Spacer()
+                        Text("1.0").foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("应用")
+                        Spacer()
+                        Text("本地听书").foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    Text("更多设置将在后续版本加入")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }
 

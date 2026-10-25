@@ -7,8 +7,6 @@ struct EpisodeSheet: View {
     @EnvironmentObject var library: LibraryModel
     @Environment(\.dismiss) private var dismiss
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
-
     private var groupStarts: [Int] {
         let n = collection.tracks.count
         guard n > 0 else { return [] }
@@ -18,26 +16,17 @@ struct EpisodeSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                LazyVStack(alignment: .leading, spacing: 2) {
                     header
 
                     ForEach(groupStarts, id: \.self) { start in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(rangeTitle(start))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.55))
-                                .padding(.horizontal, 20)
-
-                            LazyVGrid(columns: columns, spacing: 10) {
-                                ForEach(start..<min(start + 100, collection.tracks.count), id: \.self) { idx in
-                                    tile(idx)
-                                }
-                            }
-                            .padding(.horizontal, 20)
+                        sectionHeader(start)
+                        ForEach(start..<min(start + 100, collection.tracks.count), id: \.self) { i in
+                            row(i, collection.tracks[i])
                         }
                     }
                 }
-                .padding(.bottom, 34)
+                .padding(.bottom, 30)
             }
             .background(Color.black)
             .navigationTitle("选集")
@@ -76,6 +65,17 @@ struct EpisodeSheet: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func sectionHeader(_ start: Int) -> some View {
+        Text(rangeTitle(start))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.45))
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
     }
 
     private func rangeTitle(_ start: Int) -> String {
@@ -83,34 +83,46 @@ struct EpisodeSheet: View {
         return "第 \(start + 1)–\(end) 集"
     }
 
-    private func tile(_ idx: Int) -> some View {
-        let t = collection.tracks[idx]
+    private func row(_ i: Int, _ t: Track) -> some View {
         let isCurrent = player.title == t.name
+        let isFav = library.isFavoriteTrack(t)
 
         return Button {
             player.play(t, queue: collection.tracks)
             dismiss()
         } label: {
-            Text("\(idx + 1)")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isCurrent ? Color.white : Color.white.opacity(0.85))
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(
-                    Group {
-                        if isCurrent {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Theme.accentGradient)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.07))
-                        }
-                    }
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                )
+            HStack(spacing: 12) {
+                Text("\(i + 1)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isCurrent ? Theme.accent : Color.white.opacity(0.45))
+                    .frame(width: 36, alignment: .trailing)
+
+                Text(t.name)
+                    .font(.system(size: 15))
+                    .foregroundStyle(isCurrent ? Theme.accent : Color.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 6)
+
+                if isFav {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.accent)
+                }
+
+                if isCurrent {
+                    Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isCurrent ? Theme.accent.opacity(0.14) : Color.clear)
+            )
+            .padding(.horizontal, 8)
         }
         .buttonStyle(.plain)
     }

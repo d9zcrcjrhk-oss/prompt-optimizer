@@ -110,15 +110,20 @@ struct HomeView: View {
                     .foregroundStyle(Theme.muted)
             }
             Spacer()
-            ZStack {
-                Circle().fill(Color.white.opacity(0.10)).frame(width: 42, height: 42)
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-                    .frame(width: 42, height: 42)
-                Image(systemName: "person.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Theme.text)
+            Button {
+                openFilesApp()
+            } label: {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.10)).frame(width: 42, height: 42)
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                }
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
