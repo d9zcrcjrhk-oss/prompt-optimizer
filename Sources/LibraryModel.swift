@@ -35,6 +35,8 @@ struct Collection: Identifiable {
 }
 
 final class LibraryModel: ObservableObject {
+    static let shared = LibraryModel()
+
     @Published var collections: [Collection] = []
     @Published var lastTrack: Track?
     @Published var coverRevision = 0
@@ -224,15 +226,24 @@ final class LibraryModel: ObservableObject {
     /// 接收从「文件」App 共享/打开到本 App 的音频
     func receiveFile(_ url: URL) {
         let importDir = docs.appendingPathComponent("共享导入", isDirectory: true)
-        try? FileManager.default.createDirectory(at: importDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: importDir, withIntermediateDirectories: true)
+        } catch {
+            importStatus = "创建目录失败：\(error.localizedDescription)"
+            return
+        }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         var dest = importDir.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: dest.path) {
             dest = importDir.appendingPathComponent(UUID().uuidString + "_" + url.lastPathComponent)
         }
-        try? FileManager.default.copyItem(at: url, to: dest)
-        importStatus = "已接收：\(url.lastPathComponent)"
+        do {
+            try FileManager.default.copyItem(at: url, to: dest)
+            importStatus = "已接收：\(url.lastPathComponent)"
+        } catch {
+            importStatus = "接收失败：\(error.localizedDescription)"
+        }
         scan()
     }
 }

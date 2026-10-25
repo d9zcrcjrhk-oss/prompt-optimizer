@@ -1,10 +1,23 @@
 import SwiftUI
 import AVFoundation
+import UIKit
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        LibraryModel.shared.receiveFile(url)
+        return true
+    }
+}
 
 @main
 struct AudioPlayerApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var player = PlayerModel()
-    @StateObject private var library = LibraryModel()
+    @StateObject private var library = LibraryModel.shared
 
     init() {
         let session = AVAudioSession.sharedInstance()

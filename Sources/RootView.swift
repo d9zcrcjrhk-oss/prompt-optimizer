@@ -94,6 +94,13 @@ struct HomeView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 20)
+
+                    if !library.importStatus.isEmpty {
+                        Text(library.importStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
+                    }
                 }
                 .padding(.top, 10)
                 .padding(.bottom, 30)
