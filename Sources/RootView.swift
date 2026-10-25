@@ -50,9 +50,14 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
 
-                    if !library.favoriteCollectionObjects.isEmpty {
+                    if !favCollections.isEmpty || !favTracks.isEmpty {
                         sectionTitle("喜欢")
-                        favoriteRow
+                        if !favCollections.isEmpty {
+                            favoriteRow
+                        }
+                        if !favTracks.isEmpty {
+                            favoriteTracksRow
+                        }
                     }
 
                     if let last = library.lastTrack {
@@ -191,10 +196,19 @@ struct HomeView: View {
         }
     }
 
+    private var favCollections: [Collection] {
+        library.favoriteCollectionObjects
+    }
+
+    private var favTracks: [Track] {
+        let all = library.collections.flatMap { $0.tracks }
+        return library.favoriteTracks.compactMap { id in all.first { $0.id == id } }
+    }
+
     private var favoriteRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                ForEach(library.favoriteCollectionObjects) { c in
+                ForEach(favCollections) { c in
                     NavigationLink {
                         CollectionDetailView(collection: c)
                     } label: {
@@ -236,6 +250,36 @@ struct HomeView: View {
         }
     }
 
+    private var favoriteTracksRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(favTracks) { t in
+                    Button {
+                        player.play(t, queue: library.queue(for: t))
+                        tab = .playing
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            coverTile(for: t)
+                                .frame(width: 82, height: 82)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1)
+                                )
+                            Text(t.name)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.text)
+                                .lineLimit(1)
+                                .frame(width: 82, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
     private func coverTile(for t: Track) -> some View {
         Group {
             if let c = library.collection(forKey: t.collectionKey),
@@ -263,6 +307,14 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
+                    Button {
+                        library.toggleFavoriteCollection(c)
+                    } label: {
+                        Label(
+                            library.isFavoriteCollection(c) ? "取消喜欢" : "添加喜欢",
+                            systemImage: library.isFavoriteCollection(c) ? "heart.slash" : "heart"
+                        )
+                    }
                     Button {
                         sheet = .rename(c)
                     } label: {
