@@ -41,6 +41,8 @@ final class LibraryModel: ObservableObject {
     @Published var lastTrack: Track?
     @Published var coverRevision = 0
     @Published var importStatus = ""
+    @Published var favoriteCollections: [String] = []
+    @Published var favoriteTracks: [String] = []
 
     private var nameOverrides: [String: String] = [:]
 
@@ -48,6 +50,8 @@ final class LibraryModel: ObservableObject {
 
     init() {
         nameOverrides = (UserDefaults.standard.dictionary(forKey: "nameOverrides") as? [String: String]) ?? [:]
+        favoriteCollections = (UserDefaults.standard.array(forKey: "favCollections") as? [String]) ?? []
+        favoriteTracks = (UserDefaults.standard.array(forKey: "favTracks") as? [String]) ?? []
     }
 
     private func folderBookmarks() -> [Data] {
@@ -245,5 +249,89 @@ final class LibraryModel: ObservableObject {
             importStatus = "接收失败：\(error.localizedDescription)"
         }
         scan()
+    }
+
+    // MARK: - 喜欢
+
+    func isFavoriteCollection(_ c: Collection) -> Bool {
+        favoriteCollections.contains(c.id)
+    }
+
+    func toggleFavoriteCollection(_ c: Collection) {
+        if let i = favoriteCollections.firstIndex(of: c.id) {
+            favoriteCollections.remove(at: i)
+        } else {
+            favoriteCollections.insert(c.id, at: 0)
+        }
+        UserDefaults.standard.set(favoriteCollections, forKey: "favCollections")
+    }
+
+    var favoriteCollectionObjects: [Collection] {
+        favoriteCollections.compactMap { id in collections.first { $0.id == id } }
+    }
+
+    func isFavoriteTrack(_ t: Track) -> Bool {
+        favoriteTracks.contains(t.id)
+    }
+
+    func toggleFavoriteTrack(_ t: Track) {
+        if let i = favoriteTracks.firstIndex(of: t.id) {
+            favoriteTracks.remove(at: i)
+        } else {
+            favoriteTracks.insert(t.id, at: 0)
+        }
+        UserDefaults.standard.set(favoriteTracks, forKey: "favTracks")
+    }
+
+    // MARK: - 删除
+
+    func deleteTrack(_ t: Track) {
+        do {
+            try FileManager.default.removeItem(at: t.url)
+        } catch {
+            importStatus = "删除失败：\(error.localizedDescription)"
+        }
+        removeBookmark(for: t.url)
+        favoriteTracks.removeAll { $0 == t.id }
+        UserDefaults.standard.set(favoriteTracks, forKey: "favTracks")
+        scan()
+    }
+
+    func deleteCollection(_ c: Collection) {
+        let fm = FileManager.default
+        if let folder = c.folderURL {
+            try? fm.removeItem(at: folder)
+            removeBookmark(for: folder)
+        }
+        for t in c.tracks {
+            removeBookmark(for: t.url)
+        }
+        let cover = coversDir.appendingPathComponent(stableKey(c.id) + ".jpg")
+        try? fm.removeItem(at: cover)
+        nameOverrides.removeValue(forKey: c.id)
+        UserDefaults.standard.set(nameOverrides, forKey: "nameOverrides")
+        favoriteCollections.removeAll { $0 == c.id }
+        UserDefaults.standard.set(favoriteCollections, forKey: "favCollections")
+        favoriteTracks.removeAll { id in c.tracks.contains { $0.id == id } }
+        UserDefaults.standard.set(favoriteTracks, forKey: "favTracks")
+        scan()
+    }
+
+    private func removeBookmark(for url: URL) {
+        var folderArr = folderBookmarks()
+        folderArr = folderArr.filter { data in
+            var stale = false
+            guard let u = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { return true }
+            return u.path != url.path
+        }
+        UserDefaults.standard.set(folderArr, forKey: "importedFolderBookmarks")
+
+        var fileArr = fileBookmarks()
+        fileArr = fileArr.filter { data in
+            var stale = false
+            guard let u = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { return true }
+            return u.path != url.path
+        }
+        UserDefaults.standard.set(fileArr, forKey: "importedFileBookmarks")
     }
 }

@@ -50,6 +50,11 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
 
+                    if !library.favoriteCollectionObjects.isEmpty {
+                        sectionTitle("喜欢")
+                        favoriteRow
+                    }
+
                     if let last = library.lastTrack {
                         HeroCard(last: last) { tab = .playing }
                     } else {
@@ -178,6 +183,51 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 20)
+        }
+    }
+
+    private var favoriteRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(library.favoriteCollectionObjects) { c in
+                    NavigationLink {
+                        CollectionDetailView(collection: c)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            favCover(c)
+                                .frame(width: 82, height: 82)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(Theme.accent.opacity(0.45), lineWidth: 1)
+                                )
+                            Text(c.name)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.text)
+                                .lineLimit(1)
+                                .frame(width: 82, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func favCover(_ c: Collection) -> some View {
+        Group {
+            if let path = library.coverURL(for: c)?.path,
+               let ui = UIImage(contentsOfFile: path) {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Theme.coverGradient(for: c.id)
+                    Text(String(c.name.prefix(1)))
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+            }
         }
     }
 

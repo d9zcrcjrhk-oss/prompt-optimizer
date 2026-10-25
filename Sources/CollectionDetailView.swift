@@ -1,10 +1,28 @@
 import SwiftUI
 import UIKit
 
+private enum DeleteTarget {
+    case collection
+    case track(Track)
+}
+
 struct CollectionDetailView: View {
     let collection: Collection
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
+
+    @State private var deleteTarget: DeleteTarget?
+    @State private var confirmDelete = false
+
+    private var deleteMessage: String {
+        guard let target = deleteTarget else { return "" }
+        switch target {
+        case .collection:
+            return "将删除整个合集的音频与封面，且不可恢复。"
+        case .track:
+            return "将删除该音频文件，且不可恢复。"
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -12,10 +30,30 @@ struct CollectionDetailView: View {
                 header
                 trackList
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 34)
         }
-        .background(Color.clear)
+        .background(Color.black.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .confirmationDialog("确定删除？", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let target = deleteTarget {
+                    switch target {
+                    case .collection:
+                        library.deleteCollection(collection)
+                    case .track(let t):
+                        library.deleteTrack(t)
+                    }
+                }
+                deleteTarget = nil
+            }
+            Button("取消", role: .cancel) {
+                deleteTarget = nil
+            }
+        } message: {
+            Text(deleteMessage)
+        }
     }
 
     private var header: some View {
@@ -25,21 +63,53 @@ struct CollectionDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
+                .shadow(color: .black.opacity(0.5), radius: 20, y: 12)
 
             Text(collection.name)
-                .font(Theme.serif(22, .bold))
-                .foregroundStyle(Theme.text)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
 
-            Text("\(collection.tracks.count) 集")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
+            HStack(spacing: 10) {
+                Text("\(collection.tracks.count) 集")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.55))
+
+                Button {
+                    library.toggleFavoriteCollection(collection)
+                } label: {
+                    Image(systemName: library.isFavoriteCollection(collection) ? "heart.fill" : "heart")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(library.isFavoriteCollection(collection) ? Theme.accent : Color.white.opacity(0.65))
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color.white.opacity(0.08)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 14)
-        .padding(.bottom, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 22)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                library.toggleFavoriteCollection(collection)
+            } label: {
+                Label(
+                    library.isFavoriteCollection(collection) ? "取消喜欢" : "添加喜欢",
+                    systemImage: library.isFavoriteCollection(collection) ? "heart.slash" : "heart"
+                )
+            }
+            Button(role: .destructive) {
+                deleteTarget = .collection
+                confirmDelete = true
+            } label: {
+                Label("删除合集", systemImage: "trash")
+            }
+        }
     }
 
     private var trackList: some View {
@@ -51,15 +121,21 @@ struct CollectionDetailView: View {
                     HStack(spacing: 12) {
                         Text("\(episodeNumber(t.name) ?? 0)")
                             .font(.system(size: 12))
-                            .foregroundStyle(player.title == t.name ? Theme.accent : Theme.muted)
+                            .foregroundStyle(player.title == t.name ? Theme.accent : Color.white.opacity(0.5))
                             .frame(width: 34, alignment: .trailing)
 
                         Text(t.name)
                             .font(.system(size: 15))
-                            .foregroundStyle(player.title == t.name ? Theme.accent : Theme.text)
+                            .foregroundStyle(player.title == t.name ? Theme.accent : Color.white)
                             .lineLimit(1)
 
                         Spacer()
+
+                        if library.isFavoriteTrack(t) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.accent)
+                        }
 
                         if player.title == t.name {
                             Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
@@ -70,11 +146,27 @@ struct CollectionDetailView: View {
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(player.title == t.name ? Theme.accent.opacity(0.14) : Color.white.opacity(0.0))
+                            .fill(player.title == t.name ? Theme.accent.opacity(0.14) : Color.clear)
                     )
                     .padding(.horizontal, 8)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button {
+                        library.toggleFavoriteTrack(t)
+                    } label: {
+                        Label(
+                            library.isFavoriteTrack(t) ? "取消喜欢" : "添加喜欢",
+                            systemImage: library.isFavoriteTrack(t) ? "heart.slash" : "heart"
+                        )
+                    }
+                    Button(role: .destructive) {
+                        deleteTarget = .track(t)
+                        confirmDelete = true
+                    } label: {
+                        Label("删除这一集", systemImage: "trash")
+                    }
+                }
             }
         }
     }
@@ -87,7 +179,7 @@ struct CollectionDetailView: View {
             ZStack {
                 Theme.coverGradient(for: collection.id)
                 Text(String(collection.name.prefix(1)))
-                    .font(Theme.serif(64, .bold))
+                    .font(.system(size: 64, weight: .bold))
                     .foregroundStyle(.white.opacity(0.92))
             }
         }

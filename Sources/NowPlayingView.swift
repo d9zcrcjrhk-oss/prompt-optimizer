@@ -48,6 +48,7 @@ struct NowPlayingView: View {
                 HStack(spacing: 10) {
                     contentToggle
                     episodeToggle
+                    favoriteToggle
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 12)
@@ -250,6 +251,39 @@ struct NowPlayingView: View {
     }
 
     // MARK: - 组件
+
+    private var currentTrack: Track? {
+        guard let c = collection else { return nil }
+        return c.tracks.first { $0.name == player.title }
+    }
+
+    private var isCurrentFavorited: Bool {
+        guard let t = currentTrack else { return false }
+        return library.isFavoriteTrack(t)
+    }
+
+    private var favoriteToggle: some View {
+        Button {
+            if let t = currentTrack {
+                library.toggleFavoriteTrack(t)
+            }
+        } label: {
+            Image(systemName: isCurrentFavorited ? "heart.fill" : "heart")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(isCurrentFavorited ? Theme.accent : Theme.onDark)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(Color.black.opacity(0.3)))
+                .overlay(
+                    Capsule().strokeBorder(
+                        isCurrentFavorited ? Theme.accent.opacity(0.6) : Color.white.opacity(0.28),
+                        lineWidth: 1
+                    )
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
 
     private func coverArt(_ size: CGFloat) -> some View {
         Group {
