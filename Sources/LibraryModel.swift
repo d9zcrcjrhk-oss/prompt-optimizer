@@ -35,9 +35,15 @@ struct Collection: Identifiable {
 
 final class LibraryModel: ObservableObject {
     @Published var collections: [Collection] = []
+    @Published var networkCollections: [Collection] = []
     @Published var lastTrack: Track?
     @Published var importMessage = ""
+    @Published var networkStatus = ""
+    @Published var networkBase: String = UserDefaults.standard.string(forKey: "networkBase") ?? ""
+
     let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+    var allCollections: [Collection] { collections + networkCollections }
 
     private func folderBookmarks() -> [Data] {
         (UserDefaults.standard.array(forKey: "importedFolderBookmarks") as? [Data]) ?? []
@@ -50,7 +56,6 @@ final class LibraryModel: ObservableObject {
     func scan() {
         var groups: [String: [Track]] = [:]
 
-        // A. App 自己的 Documents 文件夹（复制到手机的）
         if let en = FileManager.default.enumerator(at: docs, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
             for case let u as URL in en {
                 guard audioExtensions.contains(u.pathExtension.lowercased()) else { continue }
@@ -61,7 +66,6 @@ final class LibraryModel: ObservableObject {
             }
         }
 
-        // B. 导入的文件夹（U盘/文件，不复制，直接读）
         for data in folderBookmarks() {
             var stale = false
             guard let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { continue }
@@ -75,7 +79,6 @@ final class LibraryModel: ObservableObject {
             }
         }
 
-        // C. 导入的单个文件
         var imported: [Track] = []
         for data in fileBookmarks() {
             var stale = false
@@ -96,12 +99,76 @@ final class LibraryModel: ObservableObject {
             }
             return Collection(name: key, tracks: sorted)
         }
+        updateLastTrack()
+    }
 
-        if let p = UserDefaults.standard.string(forKey: "lastTrackPath") {
-            lastTrack = collections.flatMap { $0.tracks }.first { $0.url.path == p }
-        } else {
+    func updateLastTrack() {
+        guard let p = UserDefaults.standard.string(forKey: "lastTrackPath") else {
             lastTrack = nil
+            return
         }
+        lastTrack = allCollections.flatMap { $0.tracks }.first {
+            $0.url.path == p || $0.url.absoluteString == p
+        }
+    }
+
+    func queue(for t: Track) -> [Track] {
+        allCollections.first { $0.name == t.collection }?.tracks ?? [t]
+    }
+
+    func loadNetwork() async {
+        let base = networkBase.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !base.isEmpty else {
+            networkStatus = "请先填服务器地址"
+            return
+        }
+        networkStatus = "连接中…"
+        guard let listURL = URL(string: base + "/api/list") else {
+            networkStatus = "地址无效"
+            return
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: listURL)
+            struct Resp: Decodable {
+                struct Item: Decodable {
+                    let path: String
+                    let name: String
+                    let size: Int
+                }
+                let items: [Item]
+            }
+            let resp = try JSONDecoder().decode(Resp.self, from: data)
+            var groups: [String: [Track]] = [:]
+            for it in resp.items {
+                let parts = it.path.components(separatedBy: "/")
+                let book = parts.count >= 3 ? parts[1] : (parts.first ?? "网络")
+                let url = mediaURL(base: base, path: it.path)
+                groups[book, default: []].append(Track(url: url, name: it.name, collection: book))
+            }
+            networkCollections = groups.keys.sorted().map { key in
+                let sorted = (groups[key] ?? []).sorted { a, b in
+                    let na = episodeNumber(a.name) ?? Int.max
+                    let nb = episodeNumber(b.name) ?? Int.max
+                    if na != nb { return na < nb }
+                    return a.name.localizedStandardCompare(b.name) == .orderedAscending
+                }
+                return Collection(name: key, tracks: sorted)
+            }
+            networkStatus = "已加载 \(resp.items.count) 个音频 · \(networkCollections.count) 个合集"
+            networkBase = base
+            UserDefaults.standard.set(base, forKey: "networkBase")
+            updateLastTrack()
+        } catch {
+            networkStatus = "连接失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func mediaURL(base: String, path: String) -> URL {
+        let encoded = path.components(separatedBy: "/").map { seg in
+            seg.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? seg
+        }.joined(separator: "/")
+        return URL(string: base + "/media/" + encoded) ?? URL(string: base)!
     }
 
     func importFolder(_ url: URL) {
@@ -142,9 +209,5 @@ final class LibraryModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "importedFileBookmarks")
         importMessage = "已清空外部导入"
         scan()
-    }
-
-    func queue(for t: Track) -> [Track] {
-        collections.first { $0.name == t.collection }?.tracks ?? [t]
     }
 }
