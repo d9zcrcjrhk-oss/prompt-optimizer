@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 let audioExtensions: Set<String> = ["mp3", "m4a", "wav", "flac", "aac", "aiff", "m4b", "caf", "mp4", "ogg", "opus", "wma"]
 
-/// 直接从当前 UIViewController 弹出系统文件夹选择器（避免 SwiftUI .sheet 吞掉回调）
 final class IOSFolderPicker: NSObject, UIDocumentPickerDelegate {
     static let shared = IOSFolderPicker()
     private var completion: ((URL?) -> Void)?
@@ -47,26 +46,43 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("导入音频") {
+                Section {
+                    Text("推荐导入方式（最稳）")
+                        .font(.headline)
+                    Text("1. 打开「文件」App\n2. 进入「我的 iPhone」→「本地听书」\n3. 把你的音频文件夹拖/拷进去\n4. 回到本页，点下面的「重新扫描」")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        scanAppDocuments()
+                        if !message.isEmpty { } // message shown below
+                    } label: {
+                        Label("重新扫描 App 文件夹", systemImage: "arrow.clockwise")
+                    }
+                }
+
+                Section("其它导入方式") {
                     Button {
                         pickFolder()
                     } label: {
-                        Label("导入整个文件夹", systemImage: "folder.badge.plus")
+                        Label("导入整个文件夹（系统选择器）", systemImage: "folder.badge.plus")
                     }
                     Button {
                         showFilePicker = true
                     } label: {
                         Label("选择音频文件（可多选）", systemImage: "music.note.list")
                     }
-                    Button {
-                        scanAppDocuments()
-                    } label: {
-                        Label("扫描 App 内的「本地听书」文件夹", systemImage: "folder")
-                    }
-                    if !folderName.isEmpty {
+                    Text("提示：用系统选择器时，进入目标文件夹后点右上角「打开」；若点了没反应，请用上面的「文件 App」方式。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !folderName.isEmpty {
+                    Section("当前") {
                         Text(folderName).font(.footnote).foregroundStyle(.secondary)
                     }
-                    if !message.isEmpty {
+                }
+                if !message.isEmpty {
+                    Section {
                         Text(message).font(.footnote).foregroundStyle(.red)
                     }
                 }
@@ -89,16 +105,10 @@ struct RootView: View {
                             }
                         }
                     }
-                } else {
-                    Section {
-                        Text("还没有音频。点上面任一方式导入。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 Section {
-                    Text("版本 v2 · 新增加：文件多选 / 递归扫描子文件夹")
+                    Text("版本 v3 · 启动自动扫描 App 文件夹")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -197,15 +207,16 @@ struct RootView: View {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let audio = audioFiles(in: docs)
         if audio.isEmpty {
-            message = "App 文件夹里没有音频。可在「文件」App → 我的 iPhone → 本地听书 里拖入文件"
+            message = "App 文件夹里暂时没有音频。请按上面的「推荐导入方式」把文件放进「本地听书」文件夹。"
             return
         }
         files = audio
-        folderName = "App 文件夹（\(files.count) 个）"
+        folderName = "App 文件夹（含子文件夹，共 \(files.count) 个）"
         message = ""
     }
 
     private func restore() {
+        // 方案 A：优先还原上次的文件夹书签
         if let data = UserDefaults.standard.data(forKey: "folderBookmark") {
             var stale = false
             if let url = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) {
@@ -213,6 +224,7 @@ struct RootView: View {
                 return
             }
         }
+        // 方案 B：还原上次选中的文件
         if let arr = UserDefaults.standard.array(forKey: "fileBookmarks") as? [Data], !arr.isEmpty {
             var urls: [URL] = []
             for data in arr {
@@ -225,8 +237,11 @@ struct RootView: View {
             if !urls.isEmpty {
                 files = urls
                 folderName = "上次选择的文件（\(files.count) 个）"
+                return
             }
         }
+        // 方案 C：兜底 —— 自动扫描 App 自己的文件夹
+        scanAppDocuments()
     }
 }
 
