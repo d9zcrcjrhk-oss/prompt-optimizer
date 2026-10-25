@@ -1,23 +1,12 @@
 import SwiftUI
 import UIKit
 
-private enum PlayerSheet: Identifiable {
-    case tools
-    case content
-
-    var id: Int {
-        switch self {
-        case .tools: return 0
-        case .content: return 1
-        }
-    }
-}
-
 struct NowPlayingView: View {
     @Binding var tab: MainTab
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
-    @State private var sheet: PlayerSheet?
+    @State private var showTools = false
+    @State private var showContent = false
 
     private var collection: Collection? {
         library.collection(forKey: player.currentCollectionKey)
@@ -32,31 +21,21 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             topBar
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    coverArt
-                    titleBlock
-                    episodeChip
-                    progressBlock
-                    controls
-                    contentButton
-                }
-                .padding(.horizontal, 26)
-                .padding(.top, 6)
-                .padding(.bottom, 20)
+            if showContent {
+                contentMode
+            } else {
+                normalMode
             }
         }
-        .sheet(item: $sheet) { s in
-            switch s {
-            case .tools:
-                PlayerToolsSheet()
-                    .environmentObject(player)
-                    .environmentObject(library)
-            case .content:
-                ContentSheet(title: player.title)
-            }
+        .animation(.easeInOut(duration: 0.28), value: showContent)
+        .sheet(isPresented: $showTools) {
+            PlayerToolsSheet()
+                .environmentObject(player)
+                .environmentObject(library)
         }
     }
+
+    // MARK: - 顶栏
 
     private var topBar: some View {
         HStack {
@@ -64,10 +43,10 @@ struct NowPlayingView: View {
                 tab = .home
             } label: {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.onDark)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(.ultraThinMaterial))
+                    .background(Circle().fill(Color.black.opacity(0.35)))
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
                     .contentShape(Circle())
             }
@@ -77,58 +56,48 @@ struct NowPlayingView: View {
             Text("正在播放")
                 .font(Theme.serif(14, .semibold))
                 .foregroundStyle(Theme.onDark.opacity(0.9))
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
 
             Spacer()
 
             Button {
-                sheet = .tools
+                showTools = true
             } label: {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundStyle(Theme.onDark)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(.ultraThinMaterial))
+                    .background(Circle().fill(Color.black.opacity(0.35)))
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
                     .contentShape(Circle())
             }
         }
         .padding(.horizontal, 18)
         .padding(.top, 8)
-        .padding(.bottom, 2)
+        .padding(.bottom, 4)
     }
 
-    private var coverArt: some View {
-        Group {
-            if let ui = coverImage {
-                Image(uiImage: ui).resizable().scaledToFill()
-            } else {
-                ZStack {
-                    Theme.coverGradient(for: player.currentCollectionKey)
-                    Text(firstChar)
-                        .font(Theme.serif(64, .bold))
-                        .foregroundStyle(.white.opacity(0.92))
-                }
+    // MARK: - 普通模式
+
+    private var normalMode: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                coverArt(184)
+                titleBlock
+                episodeChip
+                progressBlock
+                controls
+                contentToggle
             }
+            .padding(.horizontal, 26)
+            .padding(.top, 4)
+            .padding(.bottom, 20)
         }
-        .frame(width: 210, height: 210)
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.55), Color.white.opacity(0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .shadow(color: .black.opacity(0.35), radius: 22, y: 12)
     }
 
     private var titleBlock: some View {
         VStack(spacing: 4) {
             Text(player.title.isEmpty ? "未播放" : player.title)
-                .font(Theme.serif(20, .semibold))
+                .font(Theme.serif(19, .semibold))
                 .foregroundStyle(Theme.onDark)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -145,9 +114,118 @@ struct NowPlayingView: View {
                 .foregroundStyle(Theme.onDark)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(.ultraThinMaterial))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                .background(Capsule().fill(Color.black.opacity(0.3)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
         }
+    }
+
+    private var contentToggle: some View {
+        Button {
+            showContent = true
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "doc.text").font(.system(size: 14, weight: .medium))
+                Text("文稿").font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Theme.onDark)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(Color.black.opacity(0.3)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 文稿模式（封面缩小，文稿居中）
+
+    private var contentMode: some View {
+        VStack(spacing: 0) {
+            compactHeader
+
+            transcriptArea
+
+            progressBlock
+                .padding(.horizontal, 26)
+
+            controls
+                .padding(.bottom, 8)
+        }
+    }
+
+    private var compactHeader: some View {
+        HStack(spacing: 10) {
+            coverArt(52)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(player.title.isEmpty ? "未播放" : player.title)
+                    .font(Theme.serif(15, .semibold))
+                    .foregroundStyle(Theme.onDark)
+                    .lineLimit(1)
+                Text(collection?.name ?? "—")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.onDarkMuted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                showContent = false
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.onDark)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Color.black.opacity(0.35)))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                    .contentShape(Circle())
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+    }
+
+    private var transcriptArea: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "doc.text")
+                .font(.system(size: 30))
+                .foregroundStyle(Theme.onDarkMuted.opacity(0.55))
+            Text("暂时没有内容")
+                .font(Theme.serif(16, .medium))
+                .foregroundStyle(Theme.onDark)
+            Text("文稿会显示在这里")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.onDarkMuted)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 30)
+    }
+
+    // MARK: - 共用组件
+
+    private func coverArt(_ size: CGFloat) -> some View {
+        Group {
+            if let ui = coverImage {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Theme.coverGradient(for: player.currentCollectionKey)
+                    Text(firstChar)
+                        .font(Theme.serif(size * 0.32, .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.3), radius: size * 0.09, y: 8)
     }
 
     private var progressBlock: some View {
@@ -186,12 +264,12 @@ struct NowPlayingView: View {
                 player.toggle()
             } label: {
                 ZStack {
-                    Circle().fill(Theme.accentGradient).frame(width: 70, height: 70)
+                    Circle().fill(Theme.accentGradient).frame(width: 68, height: 68)
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 27))
+                        .font(.system(size: 26))
                         .foregroundStyle(.white)
                 }
-                .shadow(color: Theme.accent.opacity(0.5), radius: 16, y: 8)
+                .shadow(color: Theme.accent.opacity(0.5), radius: 14, y: 8)
                 .contentShape(Circle())
             }
 
@@ -208,69 +286,9 @@ struct NowPlayingView: View {
         .padding(.vertical, 4)
     }
 
-    private var contentButton: some View {
-        Button {
-            sheet = .content
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 14, weight: .medium))
-                Text("文稿")
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .foregroundStyle(Theme.onDark)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(Capsule().fill(.ultraThinMaterial))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
     private var firstChar: String {
         guard let c = collection else { return "♪" }
         return String(c.name.prefix(1))
-    }
-}
-
-struct ContentSheet: View {
-    let title: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 32))
-                    .foregroundStyle(Theme.accent)
-                    .padding(.top, 20)
-
-                if !title.isEmpty {
-                    Text(title)
-                        .font(Theme.serif(16, .semibold))
-                        .foregroundStyle(Theme.text)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                }
-
-                Text("暂时没有内容")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.muted)
-
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
-            .padding(24)
-            .navigationTitle("文稿")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-            .presentationDetents([.medium])
-        }
     }
 }
 

@@ -52,16 +52,18 @@ struct NowPlayingBackdrop: View {
                     .resizable()
                     .scaledToFill()
                     .blur(radius: 55)
-                    .opacity(0.65)
+                    .opacity(0.55)
             } else {
                 Theme.accentGradient
             }
 
+            Color.black.opacity(0.38)
+
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.28),
-                    Color.black.opacity(0.50),
-                    Color.black.opacity(0.72)
+                    Color.black.opacity(0.45),
+                    Color.black.opacity(0.15),
+                    Color.black.opacity(0.50)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
