@@ -91,24 +91,44 @@ final class LibraryModel: ObservableObject {
         var folders: [String: URL] = [:]
         var defaultNames: [String: String] = [:]
 
-        // A. App 自己的 Documents 文件夹
-        if let en = FileManager.default.enumerator(at: docs, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-            for case let u as URL in en {
-                guard audioExtensions.contains(u.pathExtension.lowercased()) else { continue }
-                let rel = u.path.replacingOccurrences(of: docs.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                let parts = rel.components(separatedBy: "/")
-                let key: String
-                let dname: String
-                if parts.count > 1 {
-                    key = parts[0]
-                    dname = parts[0]
-                    folders[key] = docs.appendingPathComponent(parts[0])
-                } else {
-                    key = "__uncat__"
-                    dname = "未归类"
+        // A. App 自己的 Documents 文件夹（按顶层文件夹分组，避免路径前缀匹配问题）
+        let topItems = (try? FileManager.default.contentsOfDirectory(
+            at: docs,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        for item in topItems {
+            let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDir {
+                let key = item.lastPathComponent
+                folders[key] = item
+                defaultNames[key] = key
+                if let en = FileManager.default.enumerator(at: item, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+                    for case let u as URL in en {
+                        guard audioExtensions.contains(u.pathExtension.lowercased()) else { continue }
+                        groups[key, default: []].append(
+                            Track(url: u, name: u.deletingPathExtension().lastPathComponent, collectionKey: key)
+                        )
+                    }
                 }
-                groups[key, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collectionKey: key))
-                defaultNames[key] = dname
+            } else if audioExtensions.contains(item.pathExtension.lowercased()) {
+                groups["__uncat__", default: []].append(
+                    Track(url: item, name: item.deletingPathExtension().lastPathComponent, collectionKey: "__uncat__")
+                )
+                defaultNames["__uncat__"] = "未归类"
+            }
+        }
+
+        // 迁移：旧的错误分组键（整条路径的首段，如 var/private）如果被重命名过，应用到「未归类」
+        if nameOverrides["__uncat__"] == nil {
+            let known = Set(groups.keys)
+            for candidate in ["var", "private", "Documents"] {
+                if !known.contains(candidate), let v = nameOverrides[candidate] {
+                    nameOverrides["__uncat__"] = v
+                    UserDefaults.standard.set(nameOverrides, forKey: "nameOverrides")
+                    break
+                }
             }
         }
 
