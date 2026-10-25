@@ -66,6 +66,7 @@ final class LibraryModel: ObservableObject {
     @Published var lastTrack: Track?
     @Published var coverRevision = 0
     @Published var importStatus = ""
+    @Published var finishDebug = ""
     @Published var favoriteCollections: [String] = []
     @Published var favoriteTracks: [String] = []
 
@@ -484,14 +485,23 @@ final class LibraryModel: ObservableObject {
     func handleTrackFinished(_ track: Track) {
         let id = track.collectionKey
         var eps = loadWebEpisodes(id)
-        guard !eps.isEmpty else { return }
+        finishDebug = "播完：\(track.name)｜清单 \(eps.count) 条"
+        importStatus = finishDebug
+        guard !eps.isEmpty else { finishDebug += "（无清单 key=\(id)）"; importStatus = finishDebug; return }
         let stem = track.name
         guard let idx = eps.firstIndex(where: {
             ($0.name as NSString).deletingPathExtension == stem
-        }) else { return }
+        }) else { finishDebug += "（未匹配）"; importStatus = finishDebug; return }
 
         let dir = docs.appendingPathComponent(id, isDirectory: true)
         let next = idx + 2
+        finishDebug += "｜第\(idx+1)集"
+        if next < eps.count && !eps[next].downloaded {
+            finishDebug += WebSource.shared.alive ? "｜下第\(next+1)集" : "｜源已失效"
+        } else {
+            finishDebug += "｜无需下载"
+        }
+        importStatus = finishDebug
 
         if next < eps.count, !eps[next].downloaded, WebSource.shared.alive {
             let name = eps[next].name
@@ -513,8 +523,8 @@ final class LibraryModel: ObservableObject {
             }
         }
 
-        try? FileManager.default.removeItem(at: track.url)
-        if let i = eps.firstIndex(where: { $0.name == track.name }) {
+        do { try FileManager.default.removeItem(at: track.url); finishDebug += "｜已删" } catch { finishDebug += "｜删失败" }
+        if let i = eps.firstIndex(where: { ($0.name as NSString).deletingPathExtension == stem }) {
             eps[i].downloaded = false
         }
         saveWebEpisodes(id, eps)

@@ -16,6 +16,7 @@ final class WebSource: NSObject, ObservableObject, WKScriptMessageHandler {
     private var curCompletion: ((URL?) -> Void)?
     private var curTotal = 0
     private var curReceived = 0
+    private var lastProgressAt = Date()
 
     func ensureWebView() -> WKWebView {
         if let w = web { return w }
@@ -41,6 +42,7 @@ final class WebSource: NSObject, ObservableObject, WKScriptMessageHandler {
         curIndex = index
         curTotal = files[index].size
         curReceived = 0
+        lastProgressAt = Date()
         curProgress = progress
         curCompletion = completion
         DispatchQueue.main.async {
@@ -64,7 +66,11 @@ final class WebSource: NSObject, ObservableObject, WKScriptMessageHandler {
                   let h = curHandle else { return }
             h.write(raw)
             curReceived += raw.count
-            curProgress?(curTotal > 0 ? min(1, Double(curReceived) / Double(curTotal)) : 0)
+            let now = Date()
+            if now.timeIntervalSince(lastProgressAt) > 0.12 || curReceived >= curTotal {
+                lastProgressAt = now
+                curProgress?(curTotal > 0 ? min(1, Double(curReceived) / Double(curTotal)) : 0)
+            }
 
         case "readDone":
             guard let idx = d["index"] as? Int, idx == curIndex else { return }
@@ -119,7 +125,7 @@ document.getElementById('input').addEventListener('change', function (e) {
 window.startRead = async function (i) {
   var f = picked[i];
   if (!f) { send({ kind: 'readError', index: i }); return; }
-  var CHUNK = 1024 * 1024;
+  var CHUNK = 4 * 1024 * 1024;
   var total = Math.ceil(f.size / CHUNK) || 1;
   for (var seq = 0; seq < total; seq++) {
     var start = seq * CHUNK, end = Math.min(f.size, start + CHUNK);

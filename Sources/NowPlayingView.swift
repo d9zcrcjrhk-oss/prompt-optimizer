@@ -42,6 +42,16 @@ struct NowPlayingView: View {
             controls
                 .padding(.top, 2)
 
+            if !library.finishDebug.isEmpty {
+                Text(library.finishDebug)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.onDarkMuted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+            }
+
             if showContent {
                 Color.clear.frame(height: 10)
             } else {
