@@ -25,6 +25,13 @@ struct EpisodeSheet: View {
                             row(i, collection.tracks[i])
                         }
                     }
+
+                    if !pending.isEmpty {
+                        sectionHeaderText("待下载（\(pending.count)）")
+                        ForEach(pending) { ep in
+                            pendingRow(ep)
+                        }
+                    }
                 }
                 .padding(.bottom, 30)
             }
@@ -76,6 +83,68 @@ struct EpisodeSheet: View {
             .padding(.horizontal, 20)
             .padding(.top, 14)
             .padding(.bottom, 4)
+    }
+
+    private var pending: [WebEpisode] {
+        let names = Set(collection.tracks.map { $0.name })
+        return library.loadWebEpisodes(collection.id).filter { !names.contains($0.name) }
+    }
+
+    private func sectionHeaderText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.45))
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 4)
+    }
+
+    private func pendingRow(_ ep: WebEpisode) -> some View {
+        Button {
+            downloadPending(ep)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 36)
+                Text(ep.name)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(2)
+                Spacer(minLength: 6)
+                Text(WebSource.shared.alive ? "待下载" : "需重新导入")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func downloadPending(_ ep: WebEpisode) {
+        guard WebSource.shared.alive else { return }
+        let eps = library.loadWebEpisodes(collection.id)
+        guard let idx = eps.firstIndex(where: { $0.name == ep.name }) else { return }
+        let dir = library.docs.appendingPathComponent(collection.id, isDirectory: true)
+        WebSource.shared.fetch(index: idx, progress: nil) { url in
+            if let url = url {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let dest = dir.appendingPathComponent(ep.name)
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.moveItem(at: url, to: dest)
+            }
+            DispatchQueue.main.async {
+                var arr = library.loadWebEpisodes(collection.id)
+                if let i = arr.firstIndex(where: { $0.name == ep.name }), url != nil {
+                    arr[i].downloaded = true
+                }
+                library.saveWebEpisodes(collection.id, arr)
+                library.scan()
+            }
+        }
     }
 
     private func rangeTitle(_ start: Int) -> String {

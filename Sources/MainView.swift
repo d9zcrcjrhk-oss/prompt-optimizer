@@ -10,6 +10,7 @@ struct MainView: View {
     @State private var tab: MainTab = .home
     @State private var showSettings = false
     @EnvironmentObject var player: PlayerModel
+    @EnvironmentObject var library: LibraryModel
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -46,6 +47,11 @@ struct MainView: View {
         .tint(Theme.accent)
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+        .task {
+            player.onTrackFinished = { track in
+                library.handleTrackFinished(track)
+            }
         }
     }
 }

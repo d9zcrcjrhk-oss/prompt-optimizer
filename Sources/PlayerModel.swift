@@ -38,6 +38,7 @@ final class PlayerModel: ObservableObject {
     }
 
     var hasTrack: Bool { !title.isEmpty }
+    var onTrackFinished: ((Track) -> Void)?
 
     func play(_ track: Track, queue: [Track]) {
         self.queue = queue
@@ -201,7 +202,11 @@ final class PlayerModel: ObservableObject {
             object: player?.currentItem,
             queue: .main
         ) { [weak self] _ in
-            self?.onEnded()
+            guard let self = self else { return }
+            if self.index < self.queue.count {
+                self.onTrackFinished?(self.queue[self.index])
+            }
+            self.onEnded()
         }
     }
 

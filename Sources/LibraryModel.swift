@@ -45,6 +45,20 @@ enum WebPlacement {
     case loose
 }
 
+struct WebEpisode: Codable, Identifiable {
+    var id: String { name }
+    let name: String
+    let size: Int
+    var downloaded: Bool
+}
+
+struct ReceivedFile: Identifiable {
+    let id = UUID()
+    let name: String
+    let size: Int
+    var url: URL
+}
+
 final class LibraryModel: ObservableObject {
     static let shared = LibraryModel()
 
@@ -432,5 +446,74 @@ final class LibraryModel: ObservableObject {
         }
         importStatus = msg
         return msg
+    }
+
+    // MARK: - 按需缓存（只保留正在听的两集）
+
+    func loadWebEpisodes(_ id: String) -> [WebEpisode] {
+        guard let d = UserDefaults.standard.data(forKey: "web-" + id),
+              let arr = try? JSONDecoder().decode([WebEpisode].self, from: d) else { return [] }
+        return arr
+    }
+
+    func saveWebEpisodes(_ id: String, _ eps: [WebEpisode]) {
+        if let d = try? JSONEncoder().encode(eps) {
+            UserDefaults.standard.set(d, forKey: "web-" + id)
+        }
+    }
+
+    func prepareWebImport(_ placement: WebPlacement) -> (id: String, dir: URL, lazy: Bool) {
+        switch placement {
+        case .newCollection(let name):
+            let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let folderName = clean.isEmpty ? "导入合集 \(Int(Date().timeIntervalSince1970))" : clean
+            let dir = docs.appendingPathComponent(folderName, isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return (folderName, dir, true)
+        case .existing(let id):
+            if let c = collections.first(where: { $0.id == id }), let f = c.folderURL {
+                return (id, f, false)
+            }
+            return ("__uncat__", docs, false)
+        case .loose:
+            return ("__uncat__", docs, false)
+        }
+    }
+
+    /// 一集播完后：下载第 N+2 集，删除第 N 集文件
+    func handleTrackFinished(_ track: Track) {
+        let id = track.collectionKey
+        var eps = loadWebEpisodes(id)
+        guard !eps.isEmpty, let idx = eps.firstIndex(where: { $0.name == track.name }) else { return }
+
+        let dir = docs.appendingPathComponent(id, isDirectory: true)
+        let next = idx + 2
+
+        if next < eps.count, !eps[next].downloaded, WebSource.shared.alive {
+            let name = eps[next].name
+            WebSource.shared.fetch(index: next, progress: nil) { url in
+                if let url = url {
+                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    let dest = dir.appendingPathComponent(name)
+                    try? FileManager.default.removeItem(at: dest)
+                    try? FileManager.default.moveItem(at: url, to: dest)
+                }
+                DispatchQueue.main.async {
+                    var arr = self.loadWebEpisodes(id)
+                    if let i = arr.firstIndex(where: { $0.name == name }), url != nil {
+                        arr[i].downloaded = true
+                    }
+                    self.saveWebEpisodes(id, arr)
+                    self.scan()
+                }
+            }
+        }
+
+        try? FileManager.default.removeItem(at: track.url)
+        if let i = eps.firstIndex(where: { $0.name == track.name }) {
+            eps[i].downloaded = false
+        }
+        saveWebEpisodes(id, eps)
+        scan()
     }
 }
