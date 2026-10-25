@@ -88,7 +88,7 @@ struct EpisodeSheet: View {
     private var pending: [WebEpisode] {
         let names = Set(collection.tracks.map { $0.name })
         return library.loadWebEpisodes(collection.id).filter {
-            !names.contains(($0.name as NSString).deletingPathExtension)
+            !$0.listened && !names.contains(($0.name as NSString).deletingPathExtension)
         }
     }
 

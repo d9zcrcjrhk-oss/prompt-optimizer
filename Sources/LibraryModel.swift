@@ -50,6 +50,24 @@ struct WebEpisode: Codable, Identifiable {
     let name: String
     let size: Int
     var downloaded: Bool
+    var listened: Bool = false
+
+    init(name: String, size: Int, downloaded: Bool, listened: Bool = false) {
+        self.name = name
+        self.size = size
+        self.downloaded = downloaded
+        self.listened = listened
+    }
+
+    enum CodingKeys: String, CodingKey { case name, size, downloaded, listened }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        size = try c.decode(Int.self, forKey: .size)
+        downloaded = try c.decode(Bool.self, forKey: .downloaded)
+        listened = try c.decodeIfPresent(Bool.self, forKey: .listened) ?? false
+    }
 }
 
 struct ReceivedFile: Identifiable {
@@ -526,6 +544,7 @@ final class LibraryModel: ObservableObject {
         do { try FileManager.default.removeItem(at: track.url); finishDebug += "｜已删" } catch { finishDebug += "｜删失败" }
         if let i = eps.firstIndex(where: { ($0.name as NSString).deletingPathExtension == stem }) {
             eps[i].downloaded = false
+            eps[i].listened = true
         }
         saveWebEpisodes(id, eps)
         scan()
