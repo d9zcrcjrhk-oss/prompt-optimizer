@@ -2,10 +2,9 @@ import SwiftUI
 import UIKit
 import PhotosUI
 
-struct RootView: View {
+struct HomeView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
-    @State private var showPlayer = false
     @State private var renameTarget: Collection?
     @State private var coverTarget: Collection?
 
@@ -22,11 +21,9 @@ struct RootView: View {
                         HeroCard(last: last)
                     }
 
-                    HStack {
-                        Text("我的合集").font(.title3).bold()
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
+                    Text("我的合集")
+                        .font(.title3).bold()
+                        .padding(.horizontal, 20)
 
                     if library.collections.isEmpty {
                         VStack(spacing: 8) {
@@ -50,7 +47,7 @@ struct RootView: View {
                         LazyVGrid(columns: columns, spacing: 18) {
                             ForEach(library.collections) { c in
                                 NavigationLink {
-                                    CollectionDetailView(collection: c, showPlayer: $showPlayer)
+                                    CollectionDetailView(collection: c)
                                 } label: {
                                     CollectionCard(collection: c)
                                 }
@@ -85,21 +82,11 @@ struct RootView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("本地听书")
-            .safeAreaInset(edge: .bottom) {
-                if player.hasTrack {
-                    MiniBar(showPlayer: $showPlayer)
-                }
-            }
-            .sheet(isPresented: $showPlayer) {
-                PlayerView().environmentObject(player)
-            }
             .sheet(item: $renameTarget) { c in
-                RenameSheet(collection: c)
-                    .environmentObject(library)
+                RenameSheet(collection: c).environmentObject(library)
             }
             .sheet(item: $coverTarget) { c in
-                CoverSheet(collection: c)
-                    .environmentObject(library)
+                CoverSheet(collection: c).environmentObject(library)
             }
             .task { library.scan() }
         }
@@ -180,7 +167,6 @@ struct CollectionCard: View {
     }
 }
 
-// MARK: - 重命名表单（真正可输入）
 struct RenameSheet: View {
     let collection: Collection
     @EnvironmentObject var library: LibraryModel
@@ -203,14 +189,10 @@ struct RenameSheet: View {
             .navigationTitle("重命名")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        if library.renameCollection(collection, to: name) {
-                            dismiss()
-                        }
+                        if library.renameCollection(collection, to: name) { dismiss() }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -219,7 +201,6 @@ struct RenameSheet: View {
     }
 }
 
-// MARK: - 封面选择（相册，带预览）
 struct CoverSheet: View {
     let collection: Collection
     @EnvironmentObject var library: LibraryModel
@@ -258,9 +239,7 @@ struct CoverSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                if busy {
-                    ProgressView()
-                }
+                if busy { ProgressView() }
 
                 Text("封面会保存到该合集的文件夹里，下次打开仍然有效。")
                     .font(.caption2)
@@ -274,9 +253,7 @@ struct CoverSheet: View {
             .navigationTitle("设置封面")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } }
             }
         }
         .onChange(of: pickedItem) { item in
@@ -292,37 +269,5 @@ struct CoverSheet: View {
                 busy = false
             }
         }
-    }
-}
-
-struct MiniBar: View {
-    @EnvironmentObject var player: PlayerModel
-    @Binding var showPlayer: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading) {
-                Text(player.title).font(.footnote).lineLimit(1)
-                Text(player.isPlaying ? "播放中" : "已暂停").font(.caption2).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button {
-                player.toggle()
-            } label: {
-                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.title2)
-            }
-            Button {
-                player.next()
-            } label: {
-                Image(systemName: "forward.end.fill")
-                    .font(.title3)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .contentShape(Rectangle())
-        .onTapGesture { showPlayer = true }
     }
 }

@@ -3,7 +3,6 @@ import UIKit
 
 struct CollectionDetailView: View {
     let collection: Collection
-    @Binding var showPlayer: Bool
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
 
@@ -28,7 +27,6 @@ struct CollectionDetailView: View {
                 ForEach(collection.tracks) { t in
                     Button {
                         player.play(t, queue: collection.tracks)
-                        showPlayer = true
                     } label: {
                         HStack {
                             Text("\(episodeNumber(t.name) ?? 0)")

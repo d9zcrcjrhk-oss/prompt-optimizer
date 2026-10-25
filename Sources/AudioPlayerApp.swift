@@ -14,7 +14,7 @@ struct AudioPlayerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            MainView()
                 .environmentObject(player)
                 .environmentObject(library)
         }
