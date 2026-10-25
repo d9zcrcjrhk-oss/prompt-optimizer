@@ -6,82 +6,41 @@ struct NowPlayingView: View {
     @EnvironmentObject var library: LibraryModel
     @State private var showTools = false
 
+    private var collection: Collection? {
+        library.collection(forKey: player.currentCollectionKey)
+    }
+
+    private var coverImage: UIImage? {
+        guard let c = collection, let path = library.coverURL(for: c)?.path else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                coverThumb
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(player.title.isEmpty ? "未播放" : player.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(collectionName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    showTools = true
-                } label: {
-                    Image(systemName: "slider.horizontal.3").font(.title3)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
+        ZStack {
+            Theme.ink.ignoresSafeArea()
 
-            VStack(spacing: 4) {
-                Slider(
-                    value: Binding(get: { player.current }, set: { player.seek(to: $0) }),
-                    in: 0...max(player.duration, 1)
-                )
-                HStack {
-                    Text(fmt(player.current)).font(.caption2)
-                    Spacer()
-                    Text(fmt(player.duration)).font(.caption2)
-                }
-                .foregroundStyle(.secondary)
+            if let ui = coverImage {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 50)
+                    .opacity(0.28)
+                    .ignoresSafeArea()
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
 
-            VStack(spacing: 10) {
-                Text("内容")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer()
-                Text("暂时没有内容")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(uiColor: .secondarySystemBackground))
+            LinearGradient(
+                colors: [Theme.ink.opacity(0.55), Theme.ink.opacity(0.9), Theme.ink],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .ignoresSafeArea()
 
-            HStack(spacing: 56) {
-                Button {
-                    player.prev()
-                } label: {
-                    Image(systemName: "backward.end.fill").font(.system(size: 30))
-                }
-                Button {
-                    player.toggle()
-                } label: {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 66))
-                }
-                Button {
-                    player.next()
-                } label: {
-                    Image(systemName: "forward.end.fill").font(.system(size: 30))
-                }
+            VStack(spacing: 0) {
+                topBar
+                contentArea
+                progressArea
+                controls
             }
-            .padding(.vertical, 18)
         }
         .sheet(isPresented: $showTools) {
             PlayerToolsSheet()
@@ -90,33 +49,139 @@ struct NowPlayingView: View {
         }
     }
 
-    @ViewBuilder private var coverThumb: some View {
-        Group {
-            if let c = collection, let path = library.coverURL(for: c)?.path, let ui = UIImage(contentsOfFile: path) {
-                Image(uiImage: ui).resizable().scaledToFill()
-            } else {
-                LinearGradient(
-                    colors: [Color(red: 0.55, green: 0.78, blue: 1.0), Color(red: 0.35, green: 0.52, blue: 0.95)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .overlay(
-                    Text(firstChar)
-                        .font(.title3).bold()
-                        .foregroundStyle(.white)
-                )
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            coverThumb
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("正在聆听")
+                    .font(Theme.serif(10))
+                    .foregroundStyle(Theme.gold)
+                Text(player.title.isEmpty ? "未播放" : player.title)
+                    .font(Theme.serif(17, .semibold))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                Text(collection?.name ?? "—")
+                    .font(Theme.serif(11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button {
+                showTools = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.title3)
+                    .foregroundStyle(Theme.muted)
             }
         }
-        .frame(width: 46, height: 46)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
     }
 
-    private var collection: Collection? {
-        library.collection(forKey: player.currentCollectionKey)
+    @ViewBuilder private var coverThumb: some View {
+        Group {
+            if let ui = coverImage {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Theme.coverFallback
+                    Text(firstChar)
+                        .font(Theme.serif(18, .bold))
+                        .foregroundStyle(Theme.goldSoft)
+                }
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.gold.opacity(0.3), lineWidth: 1))
     }
 
-    private var collectionName: String {
-        collection?.name ?? "—"
+    private var contentArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("内容")
+                .font(Theme.serif(11))
+                .foregroundStyle(Theme.muted)
+
+            Spacer()
+
+            VStack(spacing: 8) {
+                Text("此处静候")
+                    .font(Theme.serif(16, .medium))
+                    .foregroundStyle(Theme.text.opacity(0.9))
+                Text("故事的文字，会在这里慢慢浮现")
+                    .font(Theme.serif(12))
+                    .foregroundStyle(Theme.muted)
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 18).fill(Theme.surface.opacity(0.55)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Theme.gold.opacity(0.14), lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+    }
+
+    private var progressArea: some View {
+        VStack(spacing: 5) {
+            Slider(
+                value: Binding(get: { player.current }, set: { player.seek(to: $0) }),
+                in: 0...max(player.duration, 1)
+            )
+            .tint(Theme.gold)
+
+            HStack {
+                Text(fmt(player.current))
+                    .font(Theme.serif(11))
+                    .foregroundStyle(Theme.muted)
+                Spacer()
+                Text(fmt(player.duration))
+                    .font(Theme.serif(11))
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 14)
+    }
+
+    private var controls: some View {
+        HStack(spacing: 48) {
+            Button {
+                player.prev()
+            } label: {
+                Image(systemName: "backward.end.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Theme.text)
+            }
+
+            Button {
+                player.toggle()
+            } label: {
+                ZStack {
+                    Circle().fill(Theme.gold).frame(width: 74, height: 74)
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Theme.ink)
+                }
+            }
+
+            Button {
+                player.next()
+            } label: {
+                Image(systemName: "forward.end.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Theme.text)
+            }
+        }
+        .padding(.vertical, 20)
     }
 
     private var firstChar: String {
@@ -167,7 +232,7 @@ struct PlayerToolsSheet: View {
                     }
 
                     if player.sleepMode != .none {
-                        Text(sleepStatus).foregroundStyle(.orange)
+                        Text(sleepStatus).foregroundStyle(Theme.gold)
                         Button("取消定时", role: .destructive) { player.cancelSleep() }
                     }
                 }
@@ -181,13 +246,15 @@ struct PlayerToolsSheet: View {
                             } label: {
                                 HStack {
                                     Text("\(episodeNumber(t.name) ?? 0)")
-                                        .frame(width: 30)
-                                        .foregroundStyle(.secondary)
-                                    Text(t.name).lineLimit(1)
+                                        .frame(width: 30, alignment: .trailing)
+                                        .foregroundStyle(Theme.muted)
+                                    Text(t.name)
+                                        .lineLimit(1)
+                                        .foregroundStyle(player.title == t.name ? Theme.gold : Theme.text)
                                     Spacer()
                                     if player.title == t.name {
                                         Image(systemName: "speaker.wave.2.fill")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(Theme.gold)
                                     }
                                 }
                             }
@@ -195,14 +262,19 @@ struct PlayerToolsSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
             .navigationTitle("播放设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("完成") { dismiss() }
+                        .foregroundStyle(Theme.gold)
                 }
             }
         }
+        .preferredColorScheme(.dark)
+        .tint(Theme.gold)
     }
 
     private var currentCollection: Collection? {
