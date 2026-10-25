@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+import UniformTypeIdentifiers
 
 enum HomeSheet: Identifiable {
     case rename(Collection)
@@ -18,6 +19,7 @@ struct HomeView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
     @State private var sheet: HomeSheet?
+    @State private var showFolderImport = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -87,6 +89,20 @@ struct HomeView: View {
                         Label("重新扫描", systemImage: "arrow.clockwise")
                     }
                     .padding(.horizontal, 20)
+
+                    Button {
+                        showFolderImport = true
+                    } label: {
+                        Label("从 U 盘 / 文件 直接导入（不复制）", systemImage: "externaldrive.badge.plus")
+                    }
+                    .padding(.horizontal, 20)
+
+                    Button {
+                        library.clearImports()
+                    } label: {
+                        Label("清空外部导入", systemImage: "xmark.circle")
+                    }
+                    .padding(.horizontal, 20)
                 }
                 .padding(.top, 10)
                 .padding(.bottom, 30)
@@ -99,6 +115,18 @@ struct HomeView: View {
                     RenameSheet(collection: c).environmentObject(library)
                 case .cover(let c):
                     CoverSheet(collection: c).environmentObject(library)
+                }
+            }
+            .fileImporter(
+                isPresented: $showFolderImport,
+                allowedContentTypes: [.folder],
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    for u in urls { library.importFolder(u) }
+                case .failure:
+                    break
                 }
             }
             .task { library.scan() }
