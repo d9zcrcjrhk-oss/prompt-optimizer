@@ -39,6 +39,8 @@ final class PlayerModel: ObservableObject {
 
     var hasTrack: Bool { !title.isEmpty }
     var onTrackFinished: ((Track) -> Void)?
+    var queueProvider: ((String) -> [Track])?
+    private var retryCount = 0
 
     func play(_ track: Track, queue: [Track]) {
         self.queue = queue
@@ -89,18 +91,33 @@ final class PlayerModel: ObservableObject {
     }
 
     func next() {
+        if let p = queueProvider {
+            let fresh = p(currentCollectionKey)
+            if !fresh.isEmpty { queue = fresh }
+        }
         guard !queue.isEmpty else { return }
         var i = index + 1
         while i < queue.count {
             if FileManager.default.fileExists(atPath: queue[i].url.path) {
                 index = i
                 load(queue[i])
+                retryCount = 0
                 return
             }
             i += 1
         }
         player?.pause()
         isPlaying = false
+        retryNextSoon()
+    }
+
+    private func retryNextSoon() {
+        guard retryCount < 6 else { return }
+        retryCount += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self = self, !self.isPlaying else { return }
+            self.next()
+        }
     }
 
     func prev() {

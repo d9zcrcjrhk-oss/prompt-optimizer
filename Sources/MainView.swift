@@ -52,6 +52,9 @@ struct MainView: View {
             player.onTrackFinished = { track in
                 library.handleTrackFinished(track)
             }
+            player.queueProvider = { key in
+                library.collection(forKey: key)?.tracks ?? []
+            }
         }
     }
 }
