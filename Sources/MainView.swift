@@ -11,7 +11,11 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            AuroraBackground()
+            if tab == .playing {
+                NowPlayingBackdrop()
+            } else {
+                AuroraBackground()
+            }
 
             VStack(spacing: 0) {
                 Group {
@@ -27,6 +31,43 @@ struct MainView: View {
             }
         }
         .tint(Theme.accent)
+    }
+}
+
+/// 播放页的全屏背景：封面模糊 + 暗色蒙层（放在 MainView 底层，避免撑出屏幕）
+struct NowPlayingBackdrop: View {
+    @EnvironmentObject var player: PlayerModel
+    @EnvironmentObject var library: LibraryModel
+
+    private var coverImage: UIImage? {
+        guard let c = library.collection(forKey: player.currentCollectionKey),
+              let path = library.coverURL(for: c)?.path else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
+
+    var body: some View {
+        ZStack {
+            if let ui = coverImage {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 55)
+                    .opacity(0.65)
+            } else {
+                Theme.accentGradient
+            }
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.28),
+                    Color.black.opacity(0.50),
+                    Color.black.opacity(0.72)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
     }
 }
 

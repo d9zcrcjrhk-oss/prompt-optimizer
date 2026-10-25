@@ -1,11 +1,23 @@
 import SwiftUI
 import UIKit
 
+private enum PlayerSheet: Identifiable {
+    case tools
+    case content
+
+    var id: Int {
+        switch self {
+        case .tools: return 0
+        case .content: return 1
+        }
+    }
+}
+
 struct NowPlayingView: View {
     @Binding var tab: MainTab
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
-    @State private var showTools = false
+    @State private var sheet: PlayerSheet?
 
     private var collection: Collection? {
         library.collection(forKey: player.currentCollectionKey)
@@ -17,51 +29,32 @@ struct NowPlayingView: View {
     }
 
     var body: some View {
-        ZStack {
-            if let ui = coverImage {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 55)
-                    .opacity(0.65)
-                    .ignoresSafeArea()
-            } else {
-                Theme.accentGradient.ignoresSafeArea()
-            }
+        VStack(spacing: 0) {
+            topBar
 
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.28),
-                    Color.black.opacity(0.50),
-                    Color.black.opacity(0.72)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                topBar
-
-                ScrollView {
-                    VStack(spacing: 16) {
-                        coverArt
-                        titleBlock
-                        episodeChip
-                        progressBlock
-                        controls
-                        contentCard
-                    }
-                    .padding(.horizontal, 26)
-                    .padding(.top, 6)
-                    .padding(.bottom, 24)
+            ScrollView {
+                VStack(spacing: 16) {
+                    coverArt
+                    titleBlock
+                    episodeChip
+                    progressBlock
+                    controls
+                    contentButton
                 }
+                .padding(.horizontal, 26)
+                .padding(.top, 6)
+                .padding(.bottom, 20)
             }
         }
-        .sheet(isPresented: $showTools) {
-            PlayerToolsSheet()
-                .environmentObject(player)
-                .environmentObject(library)
+        .sheet(item: $sheet) { s in
+            switch s {
+            case .tools:
+                PlayerToolsSheet()
+                    .environmentObject(player)
+                    .environmentObject(library)
+            case .content:
+                ContentSheet(title: player.title)
+            }
         }
     }
 
@@ -73,8 +66,10 @@ struct NowPlayingView: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Theme.onDark)
-                    .padding(8)
+                    .frame(width: 40, height: 40)
                     .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                    .contentShape(Circle())
             }
 
             Spacer()
@@ -86,12 +81,14 @@ struct NowPlayingView: View {
             Spacer()
 
             Button {
-                showTools = true
+                sheet = .tools
             } label: {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundStyle(Theme.onDark)
-                    .padding(8)
+                    .frame(width: 40, height: 40)
                     .background(Circle().fill(.ultraThinMaterial))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                    .contentShape(Circle())
             }
         }
         .padding(.horizontal, 18)
@@ -181,6 +178,8 @@ struct NowPlayingView: View {
                 Image(systemName: "backward.end.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Theme.onDark)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
 
             Button {
@@ -193,6 +192,7 @@ struct NowPlayingView: View {
                         .foregroundStyle(.white)
                 }
                 .shadow(color: Theme.accent.opacity(0.5), radius: 16, y: 8)
+                .contentShape(Circle())
             }
 
             Button {
@@ -201,31 +201,76 @@ struct NowPlayingView: View {
                 Image(systemName: "forward.end.fill")
                     .font(.system(size: 24))
                     .foregroundStyle(Theme.onDark)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
         }
         .padding(.vertical, 4)
     }
 
-    private var contentCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("内容")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.onDarkMuted)
-
-            Text("此处暂时没有内容")
-                .font(Theme.serif(14))
-                .foregroundStyle(Theme.onDark)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 20)
+    private var contentButton: some View {
+        Button {
+            sheet = .content
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 14, weight: .medium))
+                Text("文稿")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Theme.onDark)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(.ultraThinMaterial))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .contentShape(Capsule())
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassCard(cornerRadius: 18)
+        .buttonStyle(.plain)
     }
 
     private var firstChar: String {
         guard let c = collection else { return "♪" }
         return String(c.name.prefix(1))
+    }
+}
+
+struct ContentSheet: View {
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 20)
+
+                if !title.isEmpty {
+                    Text(title)
+                        .font(Theme.serif(16, .semibold))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+
+                Text("暂时没有内容")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.muted)
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(24)
+            .navigationTitle("文稿")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+            .presentationDetents([.medium])
+        }
     }
 }
 
