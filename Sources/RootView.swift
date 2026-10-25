@@ -78,7 +78,7 @@ struct HomeView: View {
 
                     actions
                 }
-                .padding(.bottom, 26)
+                .padding(.bottom, 168)
             }
             .background(Color.clear)
             .toolbar(.hidden, for: .navigationBar)
@@ -95,10 +95,10 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("我的书架")
-                    .font(Theme.serif(28, .bold))
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("主页")
+                    .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(Theme.text)
                 Text("共 \(library.collections.count) 部 · \(totalEpisodes) 集")
                     .font(.system(size: 12))
@@ -106,17 +106,17 @@ struct HomeView: View {
             }
             Spacer()
             ZStack {
-                Circle().fill(.ultraThinMaterial).frame(width: 44, height: 44)
+                Circle().fill(Color.white.opacity(0.10)).frame(width: 42, height: 42)
                 Circle()
-                    .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
-                    .frame(width: 44, height: 44)
-                Image(systemName: "headphones")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Theme.accent)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    .frame(width: 42, height: 42)
+                Image(systemName: "person.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Theme.text)
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
+        .padding(.top, 10)
     }
 
     private func sectionTitle(_ title: String) -> some View {

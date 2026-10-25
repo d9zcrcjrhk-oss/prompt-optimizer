@@ -2,42 +2,21 @@ import SwiftUI
 import UIKit
 
 enum Theme {
-    static let accent = Color(red: 0.49, green: 0.30, blue: 0.90)
-    static let accent2 = Color(red: 0.93, green: 0.28, blue: 0.60)
+    static let bg = Color.black
+    static let text = Color.white
+    static let muted = Color.white.opacity(0.58)
+
+    static let accent = Color(red: 1.00, green: 0.20, blue: 0.36)
+    static let accent2 = Color(red: 1.00, green: 0.42, blue: 0.32)
     static var accentGradient: LinearGradient {
         LinearGradient(colors: [accent, accent2], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     static let onDark = Color.white
-    static let onDarkMuted = Color.white.opacity(0.72)
-    static let text = Color.primary
-    static let muted = Color.secondary
+    static let onDarkMuted = Color.white.opacity(0.70)
 
     static func serif(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .serif)
-    }
-
-    static func aurora(_ scheme: ColorScheme) -> LinearGradient {
-        if scheme == .dark {
-            return LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.07, blue: 0.22),
-                    Color(red: 0.24, green: 0.06, blue: 0.30),
-                    Color(red: 0.04, green: 0.10, blue: 0.20)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        return LinearGradient(
-            colors: [
-                Color(red: 0.96, green: 0.92, blue: 1.00),
-                Color(red: 1.00, green: 0.90, blue: 0.93),
-                Color(red: 0.88, green: 0.95, blue: 1.00)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        .system(size: size, weight: weight)
     }
 
     private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
@@ -72,54 +51,31 @@ enum Theme {
     }
 }
 
-struct AuroraBackground: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        ZStack {
-            Theme.aurora(scheme)
-
-            Circle()
-                .fill(Theme.accent.opacity(scheme == .dark ? 0.34 : 0.20))
-                .frame(width: 320, height: 320)
-                .blur(radius: 90)
-                .offset(x: -120, y: -240)
-
-            Circle()
-                .fill(Theme.accent2.opacity(scheme == .dark ? 0.30 : 0.18))
-                .frame(width: 300, height: 300)
-                .blur(radius: 100)
-                .offset(x: 140, y: 250)
-        }
-        .ignoresSafeArea()
-    }
-}
-
 struct GlassCard: ViewModifier {
     var cornerRadius: CGFloat = 20
-    @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
-                            colors: [
-                                Color.white.opacity(scheme == .dark ? 0.32 : 0.80),
-                                Color.white.opacity(0.05)
-                            ],
+                            colors: [Color.white.opacity(0.28), Color.white.opacity(0.04)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 1
                     )
             )
-            .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.10), radius: 16, y: 8)
+            .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
     }
 }
 
