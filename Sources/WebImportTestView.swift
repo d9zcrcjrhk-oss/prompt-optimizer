@@ -56,7 +56,16 @@ final class WebSource: NSObject, ObservableObject, WKScriptMessageHandler {
         switch kind {
         case "picked":
             let arr = d["files"] as? [[String: Any]] ?? []
-            files = arr.map { (($0["name"] as? String) ?? "audio", ($0["size"] as? Int) ?? 0) }
+            var list: [(name: String, size: Int)] = arr.map {
+                (($0["name"] as? String) ?? "audio", ($0["size"] as? Int) ?? 0)
+            }
+            list.sort { a, b in
+                let na = episodeNumber(a.name) ?? Int.max
+                let nb = episodeNumber(b.name) ?? Int.max
+                if na != nb { return na < nb }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            }
+            files = list
             alive = true
 
         case "chunk":
