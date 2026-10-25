@@ -29,6 +29,7 @@ struct CollectionDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 trackList
+                pendingSection
             }
             .padding(.bottom, 34)
         }
@@ -73,7 +74,7 @@ struct CollectionDetailView: View {
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 10) {
-                Text("\(collection.tracks.count) 集")
+                Text("\(collection.tracks.count + pending.count) 集")
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.55))
 
@@ -167,6 +168,71 @@ struct CollectionDetailView: View {
                         Label("删除这一集", systemImage: "trash")
                     }
                 }
+            }
+        }
+    }
+
+    private var pending: [WebEpisode] {
+        let names = Set(collection.tracks.map { $0.name })
+        return library.loadWebEpisodes(collection.id).filter { !names.contains($0.name) }
+    }
+
+    private var pendingSection: some View {
+        Group {
+            if !pending.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("待下载（\(pending.count)）")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(.top, 18)
+                        .padding(.bottom, 4)
+
+                    ForEach(pending) { ep in
+                        Button {
+                            downloadPending(ep)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "icloud.and.arrow.down")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Theme.accent)
+                                Text(ep.name)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.white.opacity(0.75))
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                                Text(WebSource.shared.alive ? "待下载" : "需重新导入")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                            .padding(.vertical, 9)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    private func downloadPending(_ ep: WebEpisode) {
+        guard WebSource.shared.alive else { return }
+        let eps = library.loadWebEpisodes(collection.id)
+        guard let idx = eps.firstIndex(where: { $0.name == ep.name }) else { return }
+        let dir = library.docs.appendingPathComponent(collection.id, isDirectory: true)
+        WebSource.shared.fetch(index: idx, progress: nil) { url in
+            if let url = url {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let dest = dir.appendingPathComponent(ep.name)
+                try? FileManager.default.removeItem(at: dest)
+                try? FileManager.default.moveItem(at: url, to: dest)
+            }
+            DispatchQueue.main.async {
+                var arr = library.loadWebEpisodes(collection.id)
+                if let i = arr.firstIndex(where: { $0.name == ep.name }), url != nil {
+                    arr[i].downloaded = true
+                }
+                library.saveWebEpisodes(collection.id, arr)
+                library.scan()
             }
         }
     }
