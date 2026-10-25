@@ -1,13 +1,9 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct RootView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
     @State private var showPlayer = false
-    @State private var showFolderImport = false
-    @State private var showFileImport = false
-    @State private var connecting = false
 
     var body: some View {
         NavigationStack {
@@ -31,46 +27,13 @@ struct RootView: View {
                     }
                 }
 
-                Section("网络串流（U盘 → 电脑）") {
-                    TextField(
-                        "http://10.0.221.37:8088",
-                        text: Binding(
-                            get: { library.networkBase },
-                            set: { library.networkBase = $0 }
-                        )
-                    )
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-
-                    Button {
-                        connecting = true
-                        Task {
-                            await library.loadNetwork()
-                            connecting = false
-                        }
-                    } label: {
-                        Label(connecting ? "连接中…" : "连接并加载", systemImage: "wifi")
-                    }
-
-                    if !library.networkStatus.isEmpty {
-                        Text(library.networkStatus)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text("电脑运行 media-server.py 后，手机连同一 WiFi，填电脑地址。不复制、在线听。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("合集（\(library.allCollections.count)）") {
-                    if library.allCollections.isEmpty {
-                        Text("还没有合集。可从 U 盘网络串流，或把音频放进 App 文件夹。")
+                Section("合集（\(library.collections.count)）") {
+                    if library.collections.isEmpty {
+                        Text("还没有音频。把音频文件夹放进「文件」App → 我的 iPhone → 本地听书，再点下面的重新扫描。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(library.allCollections) { c in
+                    ForEach(library.collections) { c in
                         NavigationLink {
                             TrackListView(collection: c, showPlayer: $showPlayer)
                         } label: {
@@ -92,56 +55,18 @@ struct RootView: View {
                     }
                 }
 
-                Section("手机内 App 文件夹") {
+                Section {
                     Button {
                         library.scan()
                     } label: {
                         Label("重新扫描", systemImage: "arrow.clockwise")
                     }
-                    Text("也可把音频放进：文件 App → 我的 iPhone → 本地听书")
+                    Text("把音频放进：文件 App → 我的 iPhone → 本地听书，再点重新扫描。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-
-                if !library.importMessage.isEmpty {
-                    Section {
-                        Text(library.importMessage).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        library.clearImports()
-                    } label: {
-                        Label("清空 U盘/外部导入", systemImage: "trash")
-                    }
-                }
             }
             .navigationTitle("本地听书")
-            .fileImporter(
-                isPresented: $showFolderImport,
-                allowedContentTypes: [.folder],
-                allowsMultipleSelection: true
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    for u in urls { library.importFolder(u) }
-                case .failure(let err):
-                    library.importMessage = "选择文件夹失败：\(err.localizedDescription)"
-                }
-            }
-            .fileImporter(
-                isPresented: $showFileImport,
-                allowedContentTypes: [.audio],
-                allowsMultipleSelection: true
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    library.importFiles(urls)
-                case .failure(let err):
-                    library.importMessage = "选择文件失败：\(err.localizedDescription)"
-                }
-            }
             .safeAreaInset(edge: .bottom) {
                 if player.hasTrack {
                     MiniBar(showPlayer: $showPlayer)
@@ -150,12 +75,7 @@ struct RootView: View {
             .sheet(isPresented: $showPlayer) {
                 PlayerView().environmentObject(player)
             }
-            .task {
-                library.scan()
-                if !library.networkBase.isEmpty {
-                    await library.loadNetwork()
-                }
-            }
+            .task { library.scan() }
         }
     }
 }
