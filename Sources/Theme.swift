@@ -10,6 +10,8 @@ enum Theme {
 
     static let onDark = Color.white
     static let onDarkMuted = Color.white.opacity(0.72)
+    static let text = Color.primary
+    static let muted = Color.secondary
 
     static func serif(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .serif)
