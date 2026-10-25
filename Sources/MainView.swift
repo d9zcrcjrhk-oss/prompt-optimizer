@@ -46,28 +46,34 @@ struct NowPlayingBackdrop: View {
     }
 
     var body: some View {
-        ZStack {
-            if let ui = coverImage {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .blur(radius: 55)
-                    .opacity(0.55)
-            } else {
-                Theme.accentGradient
+        GeometryReader { geo in
+            ZStack {
+                if let ui = coverImage {
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .blur(radius: 55)
+                        .opacity(0.55)
+                        .scaleEffect(1.2)
+                } else {
+                    Theme.accentGradient
+                }
+
+                Color.black.opacity(0.38)
+
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.45),
+                        Color.black.opacity(0.15),
+                        Color.black.opacity(0.50)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-
-            Color.black.opacity(0.38)
-
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.45),
-                    Color.black.opacity(0.15),
-                    Color.black.opacity(0.50)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .ignoresSafeArea()
     }

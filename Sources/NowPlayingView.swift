@@ -21,13 +21,24 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             topBar
 
+            mainContent
+
+            progressBlock
+                .padding(.horizontal, 26)
+                .padding(.top, 8)
+
+            controls
+                .padding(.top, 2)
+
             if showContent {
-                contentMode
+                Color.clear.frame(height: 10)
             } else {
-                normalMode
+                contentToggle
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
             }
         }
-        .animation(.easeInOut(duration: 0.28), value: showContent)
+        .animation(.easeInOut(duration: 0.25), value: showContent)
         .sheet(isPresented: $showTools) {
             PlayerToolsSheet()
                 .environmentObject(player)
@@ -38,7 +49,7 @@ struct NowPlayingView: View {
     // MARK: - 顶栏
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 0) {
             Button {
                 tab = .home
             } label: {
@@ -51,14 +62,14 @@ struct NowPlayingView: View {
                     .contentShape(Circle())
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Text("正在播放")
                 .font(Theme.serif(14, .semibold))
                 .foregroundStyle(Theme.onDark.opacity(0.9))
                 .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Button {
                 showTools = true
@@ -72,25 +83,29 @@ struct NowPlayingView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
     }
 
-    // MARK: - 普通模式
+    // MARK: - 主区域（普通 / 文稿）
 
-    private var normalMode: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                coverArt(184)
-                titleBlock
-                episodeChip
-                progressBlock
-                controls
-                contentToggle
+    @ViewBuilder private var mainContent: some View {
+        if showContent {
+            VStack(spacing: 0) {
+                compactHeader
+                transcriptArea
             }
-            .padding(.horizontal, 26)
-            .padding(.top, 4)
-            .padding(.bottom, 20)
+        } else {
+            ScrollView {
+                VStack(spacing: 14) {
+                    coverArt(184)
+                    titleBlock
+                    episodeChip
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 6)
+                .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -119,6 +134,62 @@ struct NowPlayingView: View {
         }
     }
 
+    // MARK: - 文稿模式
+
+    private var compactHeader: some View {
+        HStack(spacing: 10) {
+            coverArt(54)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(player.title.isEmpty ? "未播放" : player.title)
+                    .font(Theme.serif(15, .semibold))
+                    .foregroundStyle(Theme.onDark)
+                    .lineLimit(1)
+                Text(collection?.name ?? "—")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.onDarkMuted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 6)
+
+            Button {
+                showContent = false
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.onDark)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Color.black.opacity(0.35)))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                    .contentShape(Circle())
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+
+    private var transcriptArea: some View {
+        VStack(spacing: 8) {
+            Spacer(minLength: 16)
+            Image(systemName: "doc.text")
+                .font(.system(size: 28))
+                .foregroundStyle(Theme.onDarkMuted.opacity(0.55))
+            Text("暂时没有内容")
+                .font(Theme.serif(16, .medium))
+                .foregroundStyle(Theme.onDark)
+            Text("文稿会显示在这里")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.onDarkMuted)
+            Spacer(minLength: 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 30)
+    }
+
+    // MARK: - 文稿按钮
+
     private var contentToggle: some View {
         Button {
             showContent = true
@@ -137,74 +208,7 @@ struct NowPlayingView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - 文稿模式（封面缩小，文稿居中）
-
-    private var contentMode: some View {
-        VStack(spacing: 0) {
-            compactHeader
-
-            transcriptArea
-
-            progressBlock
-                .padding(.horizontal, 26)
-
-            controls
-                .padding(.bottom, 8)
-        }
-    }
-
-    private var compactHeader: some View {
-        HStack(spacing: 10) {
-            coverArt(52)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(player.title.isEmpty ? "未播放" : player.title)
-                    .font(Theme.serif(15, .semibold))
-                    .foregroundStyle(Theme.onDark)
-                    .lineLimit(1)
-                Text(collection?.name ?? "—")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.onDarkMuted)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Button {
-                showContent = false
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.onDark)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(Color.black.opacity(0.35)))
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
-                    .contentShape(Circle())
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 8)
-    }
-
-    private var transcriptArea: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "doc.text")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.onDarkMuted.opacity(0.55))
-            Text("暂时没有内容")
-                .font(Theme.serif(16, .medium))
-                .foregroundStyle(Theme.onDark)
-            Text("文稿会显示在这里")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.onDarkMuted)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 30)
-    }
-
-    // MARK: - 共用组件
+    // MARK: - 组件
 
     private func coverArt(_ size: CGFloat) -> some View {
         Group {
@@ -264,9 +268,9 @@ struct NowPlayingView: View {
                 player.toggle()
             } label: {
                 ZStack {
-                    Circle().fill(Theme.accentGradient).frame(width: 68, height: 68)
+                    Circle().fill(Theme.accentGradient).frame(width: 66, height: 66)
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 26))
+                        .font(.system(size: 25))
                         .foregroundStyle(.white)
                 }
                 .shadow(color: Theme.accent.opacity(0.5), radius: 14, y: 8)
@@ -283,7 +287,6 @@ struct NowPlayingView: View {
                     .contentShape(Rectangle())
             }
         }
-        .padding(.vertical, 4)
     }
 
     private var firstChar: String {
