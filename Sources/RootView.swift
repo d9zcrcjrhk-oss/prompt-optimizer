@@ -5,11 +5,13 @@ import PhotosUI
 enum HomeSheet: Identifiable {
     case rename(Collection)
     case cover(Collection)
+    case importWeb
 
     var id: String {
         switch self {
         case .rename(let c): return "rename-\(c.id)"
         case .cover(let c): return "cover-\(c.id)"
+        case .importWeb: return "importWeb"
         }
     }
 }
@@ -98,6 +100,8 @@ struct HomeView: View {
                     RenameSheet(collection: c).environmentObject(library)
                 case .cover(let c):
                     CoverSheet(collection: c).environmentObject(library)
+                case .importWeb:
+                    WebImportView().environmentObject(library)
                 }
             }
             .task { library.scan() }
@@ -116,7 +120,7 @@ struct HomeView: View {
             }
             Spacer()
             Button {
-                openFilesApp()
+                sheet = .importWeb
             } label: {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.10)).frame(width: 42, height: 42)

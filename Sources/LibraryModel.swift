@@ -34,6 +34,12 @@ struct Collection: Identifiable {
     let tracks: [Track]
 }
 
+enum WebPlacement {
+    case newCollection(String)
+    case existing(String)
+    case loose
+}
+
 final class LibraryModel: ObservableObject {
     static let shared = LibraryModel()
 
@@ -333,5 +339,46 @@ final class LibraryModel: ObservableObject {
             return u.path != url.path
         }
         UserDefaults.standard.set(fileArr, forKey: "importedFileBookmarks")
+    }
+
+    // MARK: - 网页导入
+
+    @discardableResult
+    func importWebFiles(_ files: [ReceivedFile], placement: WebPlacement) -> String {
+        let fm = FileManager.default
+        var destDir: URL = docs
+
+        switch placement {
+        case .newCollection(let name):
+            let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let folderName = clean.isEmpty ? "导入合集 \(Int(Date().timeIntervalSince1970))" : clean
+            destDir = docs.appendingPathComponent(folderName, isDirectory: true)
+            try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        case .existing(let id):
+            if let c = collections.first(where: { $0.id == id }), let folder = c.folderURL {
+                destDir = folder
+            }
+        case .loose:
+            destDir = docs
+        }
+
+        var ok = 0
+        for f in files {
+            guard fm.fileExists(atPath: f.url.path) else { continue }
+            var dest = destDir.appendingPathComponent(f.name)
+            if fm.fileExists(atPath: dest.path) {
+                dest = destDir.appendingPathComponent(UUID().uuidString.prefix(6) + "_" + f.name)
+            }
+            do {
+                try fm.moveItem(at: f.url, to: dest)
+                ok += 1
+            } catch {
+                // 忽略单个文件失败
+            }
+        }
+
+        importStatus = "已导入 \(ok) 个文件"
+        scan()
+        return importStatus
     }
 }

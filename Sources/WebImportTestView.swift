@@ -1,102 +1,248 @@
 import SwiftUI
 import WebKit
 
-final class WebBridge: NSObject, ObservableObject, WKScriptMessageHandler {
-    @Published var logs: [String] = []
+struct ReceivedFile: Identifiable {
+    let id = UUID()
+    let name: String
+    let size: Int
+    var url: URL
+}
+
+final class WebImportModel: NSObject, ObservableObject, WKScriptMessageHandler {
+    @Published var files: [ReceivedFile] = []
+    @Published var status = "等待选择…"
+    @Published var progress: Double = 0
+    @Published var finished = false
+    @Published var failed: String?
+
+    private var handles: [Int: FileHandle] = [:]
+    private var received: [Int: Int] = [:]
+    private var totalBytes = 0
+    private var tempDir: URL?
 
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
-        guard let dict = message.body as? [String: Any] else {
-            logs.append(String(describing: message.body))
-            return
-        }
-        let kind = dict["kind"] as? String ?? "?"
+        guard let dict = message.body as? [String: Any],
+              let kind = dict["kind"] as? String else { return }
 
-        if kind == "files" || kind == "dir" {
-            let count = dict["count"] as? Int ?? 0
-            logs.append("\(kind == "files" ? "选文件" : "选文件夹")：收到 \(count) 个")
-            if let files = dict["files"] as? [[String: Any]] {
-                for f in files.prefix(8) {
-                    let name = f["name"] as? String ?? ""
-                    let size = f["size"] as? Int ?? 0
-                    let rel = f["rel"] as? String ?? ""
-                    logs.append("· \(name) [\(size)] \(rel)")
-                }
-                if files.count > 8 {
-                    logs.append("… 还有 \(files.count - 8) 个")
-                }
+        switch kind {
+        case "files":
+            let arr = dict["files"] as? [[String: Any]] ?? []
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("webimport-\(UUID().uuidString)", isDirectory: true)
+            tempDir = dir
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+            var list: [ReceivedFile] = []
+            for (i, f) in arr.enumerated() {
+                let name = (f["name"] as? String) ?? "audio-\(i)"
+                let size = (f["size"] as? Int) ?? 0
+                let url = dir.appendingPathComponent("\(i)-\(name)")
+                FileManager.default.createFile(atPath: url.path, contents: nil)
+                handles[i] = try? FileHandle(forWritingTo: url)
+                received[i] = 0
+                list.append(ReceivedFile(name: name, size: size, url: url))
             }
-        } else if kind == "read" {
-            let ok = dict["ok"] as? Bool ?? false
-            if ok {
-                let size = dict["size"] as? Int ?? 0
-                let head = dict["head"] as? String ?? ""
-                logs.append("读取内容：成功 ✓ size=\(size) head=\(String(head.prefix(24)))…")
-            } else {
-                let err = dict["error"] as? String ?? ""
-                logs.append("读取内容：失败 ✗ \(err)")
-            }
-        } else {
-            logs.append("收到：\(dict)")
+            totalBytes = list.reduce(0) { $0 + $1.size }
+            files = list
+            status = "接收中…"
+
+        case "chunk":
+            guard let file = dict["file"] as? Int,
+                  let b64 = dict["data"] as? String,
+                  let handle = handles[file],
+                  let raw = Data(base64Encoded: b64) else { return }
+            handle.write(raw)
+            received[file, default: 0] += raw.count
+            let r = received.values.reduce(0, +)
+            progress = totalBytes > 0 ? min(1, Double(r) / Double(totalBytes)) : 0
+
+        case "fileDone":
+            guard let file = dict["file"] as? Int else { return }
+            handles[file]?.closeFile()
+            handles[file] = nil
+
+        case "allDone":
+            progress = 1
+            status = "接收完成"
+            finished = true
+
+        case "error":
+            failed = dict["error"] as? String
+            status = "出错"
+
+        default:
+            break
         }
     }
 }
 
-struct WebImportTestView: View {
+struct WebImportView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var bridge = WebBridge()
+    @EnvironmentObject var library: LibraryModel
+    @StateObject private var model = WebImportModel()
+    @State private var mode = 0
+    @State private var newName = ""
+    @State private var existingId = ""
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                WebTestWebView(bridge: bridge)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("App 收到的回传：")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .padding(.top, 8)
-
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 4) {
-                            if bridge.logs.isEmpty {
-                                Text("等待操作…")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.4))
-                            } else {
-                                ForEach(Array(bridge.logs.enumerated()), id: \.offset) { _, line in
-                                    Text(line)
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.white.opacity(0.85))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                        .padding(12)
+            Group {
+                if model.finished {
+                    placementChooser
+                } else {
+                    VStack(spacing: 0) {
+                        WebImportWebView(model: model)
+                        progressBar
                     }
                 }
-                .frame(height: 190)
-                .background(Color.white.opacity(0.06))
             }
             .background(Color.black)
-            .navigationTitle("导入实验")
+            .navigationTitle("导入")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                    Button("取消") { dismiss() }
                 }
             }
         }
         .preferredColorScheme(.dark)
+        .tint(Theme.accent)
+    }
+
+    private var progressBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(model.status)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Text("\(Int(model.progress * 100))%")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            ProgressView(value: model.progress)
+                .tint(Theme.accent)
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.05))
+    }
+
+    private var placementChooser: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Theme.accent)
+                    Text("已接收 \(model.files.count) 个文件")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(model.files.prefix(5)) { f in
+                        Text("· \(f.name)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
+                    if model.files.count > 5 {
+                        Text("… 还有 \(model.files.count - 5) 个")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("这些文件要怎么放？")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.6))
+
+                    Picker("方式", selection: $mode) {
+                        Text("制作合集").tag(0)
+                        Text("已有合集").tag(1)
+                        Text("不形成合集").tag(2)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if mode == 0 {
+                    TextField("合集名称", text: $newName)
+                        .textFieldStyle(.plain)
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08)))
+                        .foregroundStyle(.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                } else if mode == 1 {
+                    if library.collections.isEmpty {
+                        Text("还没有合集，请选「制作合集」")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.5))
+                    } else {
+                        Picker("合集", selection: $existingId) {
+                            ForEach(library.collections) { c in
+                                Text(c.name).tag(c.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.08)))
+                    }
+                } else {
+                    Text("文件会放进「未归类」里")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                Button {
+                    let placement: WebPlacement
+                    switch mode {
+                    case 0: placement = .newCollection(newName)
+                    case 1: placement = .existing(existingId)
+                    default: placement = .loose
+                    }
+                    _ = library.importWebFiles(model.files, placement: placement)
+                    dismiss()
+                } label: {
+                    Text("导入")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.accentGradient))
+                }
+                .buttonStyle(.plain)
+
+                Button("取消") { dismiss() }
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+
+                Spacer()
+            }
+            .padding(20)
+        }
+        .onAppear {
+            if existingId.isEmpty, let first = library.collections.first {
+                existingId = first.id
+            }
+        }
     }
 }
 
-struct WebTestWebView: UIViewRepresentable {
-    let bridge: WebBridge
+struct WebImportWebView: UIViewRepresentable {
+    let model: WebImportModel
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.userContentController.add(bridge, name: "test")
+        config.userContentController.add(model, name: "imp")
         let web = WKWebView(frame: .zero, configuration: config)
         web.backgroundColor = .black
         web.isOpaque = false
@@ -112,78 +258,70 @@ struct WebTestWebView: UIViewRepresentable {
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
-  body { background:#000; color:#fff; font-family:-apple-system; padding:18px; margin:0; }
-  h1 { font-size:22px; margin:6px 0 2px; }
+  body { background:#000; color:#fff; font-family:-apple-system; padding:20px; margin:0; }
+  h1 { font-size:22px; margin:4px 0 2px; }
   p.sub { color:#888; font-size:13px; margin:0 0 18px; }
-  button { display:block; width:100%; padding:15px; margin:10px 0; border-radius:14px;
-           background:#fff; color:#000; font-size:16px; font-weight:600; border:none; }
-  button.alt { background:#2a2a2e; color:#fff; }
+  button { display:block; width:100%; padding:16px; margin:0; border-radius:14px;
+           background:#fff; color:#000; font-size:17px; font-weight:600; border:none; }
   input[type=file] { display:none; }
-  #out { font-size:13px; line-height:1.7; color:#b9b9bd; white-space:pre-wrap; margin-top:16px;
-         background:#111; border-radius:12px; padding:12px; }
+  .tip { margin-top:18px; color:#666; font-size:12px; line-height:1.7; }
 </style>
 </head>
 <body>
-<h1>导入实验</h1>
-<p class="sub">点下面按钮，看能不能选中 U 盘里的文件 / 文件夹</p>
+<h1>选择音频</h1>
+<p class="sub">可多选，选中后会自动传到 App</p>
 
-<button id="pickFiles">① 选择文件（可多选）</button>
-<button class="alt" id="pickDir">② 选择文件夹</button>
+<button id="pick">选择音频文件（可多选）</button>
+<input type="file" id="input" multiple>
 
-<input type="file" id="fileInput" multiple>
-<input type="file" id="dirInput" webkitdirectory>
-
-<div id="out">等待操作…</div>
+<p class="tip">提示：本页只能选择「文件」，无法选择整个文件夹。选完后 App 会问你要怎么归类。</p>
 
 <script>
+var CHUNK = 1024 * 1024;
+
 function send(obj) {
-  try { window.webkit.messageHandlers.test.postMessage(obj); } catch (e) {}
+  try { window.webkit.messageHandlers.imp.postMessage(obj); } catch (e) {}
 }
-function show(s) { document.getElementById('out').textContent = s; }
 
-document.getElementById('pickFiles').addEventListener('click', function () {
-  document.getElementById('fileInput').click();
-});
-document.getElementById('pickDir').addEventListener('click', function () {
-  document.getElementById('dirInput').click();
+document.getElementById('pick').addEventListener('click', function () {
+  document.getElementById('input').click();
 });
 
-document.getElementById('fileInput').addEventListener('change', async function (e) {
+document.getElementById('input').addEventListener('change', async function (e) {
   var files = Array.prototype.slice.call(e.target.files || []);
-  var txt = '① 选了 ' + files.length + ' 个文件\n';
-  files.forEach(function (f) { txt += '· ' + f.name + '  (' + f.size + ' 字节)\n'; });
-  show(txt);
+  if (files.length === 0) { return; }
+
   send({
     kind: 'files',
-    count: files.length,
-    files: files.map(function (f) { return { name: f.name, size: f.size, type: f.type, rel: f.webkitRelativePath || '' }; })
+    files: files.map(function (f) { return { name: f.name, size: f.size }; })
   });
 
-  if (files.length > 0) {
-    try {
-      var f0 = files[0];
-      var buf = await f0.slice(0, 512).arrayBuffer();
-      var bytes = new Uint8Array(buf);
-      var bin = '';
-      for (var i = 0; i < bytes.length; i++) { bin += String.fromCharCode(bytes[i]); }
-      send({ kind: 'read', ok: true, size: f0.size, head: btoa(bin) });
-    } catch (err) {
-      send({ kind: 'read', ok: false, error: String(err) });
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var total = Math.ceil(f.size / CHUNK) || 1;
+    for (var seq = 0; seq < total; seq++) {
+      var start = seq * CHUNK;
+      var end = Math.min(f.size, start + CHUNK);
+      try {
+        var buf = await f.slice(start, end).arrayBuffer();
+        var bytes = new Uint8Array(buf);
+        var bin = '';
+        var step = 0x8000;
+        for (var p = 0; p < bytes.length; p += step) {
+          bin += String.fromCharCode.apply(null, bytes.subarray(p, p + step));
+        }
+        send({ kind: 'chunk', file: i, seq: seq, total: total, data: btoa(bin) });
+      } catch (err) {
+        send({ kind: 'error', error: String(err) });
+        return;
+      }
+      await new Promise(function (r) { setTimeout(r, 0); });
     }
+    send({ kind: 'fileDone', file: i });
   }
-});
 
-document.getElementById('dirInput').addEventListener('change', function (e) {
-  var files = Array.prototype.slice.call(e.target.files || []);
-  var txt = '② 文件夹：' + files.length + ' 个文件\n';
-  files.slice(0, 40).forEach(function (f) { txt += '· ' + f.name + '  [' + (f.webkitRelativePath || '') + ']\n'; });
-  if (files.length > 40) { txt += '…\n'; }
-  show(txt);
-  send({
-    kind: 'dir',
-    count: files.length,
-    files: files.map(function (f) { return { name: f.name, size: f.size, rel: f.webkitRelativePath || '' }; })
-  });
+  send({ kind: 'allDone' });
+  document.getElementById('pick').textContent = '已选 ' + files.length + ' 个（可再次选择）';
 });
 </script>
 </body>
