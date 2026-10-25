@@ -352,38 +352,60 @@ final class LibraryModel: ObservableObject {
     func importWebFiles(_ files: [ReceivedFile], placement: WebPlacement) -> String {
         let fm = FileManager.default
         var destDir: URL = docs
+        var placeDesc = ""
 
         switch placement {
         case .newCollection(let name):
             let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
             let folderName = clean.isEmpty ? "导入合集 \(Int(Date().timeIntervalSince1970))" : clean
             destDir = docs.appendingPathComponent(folderName, isDirectory: true)
-            try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+            do {
+                try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+            } catch {
+                return "创建文件夹失败：\(error.localizedDescription)"
+            }
+            placeDesc = folderName
         case .existing(let id):
             if let c = collections.first(where: { $0.id == id }), let folder = c.folderURL {
                 destDir = folder
+                placeDesc = c.name
+            } else {
+                destDir = docs
+                placeDesc = "未归类"
             }
         case .loose:
             destDir = docs
+            placeDesc = "未归类"
         }
 
         var ok = 0
+        var firstError = ""
+
         for f in files {
-            guard fm.fileExists(atPath: f.url.path) else { continue }
-            var dest = destDir.appendingPathComponent(f.name)
+            guard fm.fileExists(atPath: f.url.path) else {
+                if firstError.isEmpty { firstError = "临时文件不存在" }
+                continue
+            }
+            let destName = f.name.isEmpty ? "audio-\(ok).mp3" : f.name
+            var dest = destDir.appendingPathComponent(destName)
             if fm.fileExists(atPath: dest.path) {
-                dest = destDir.appendingPathComponent(UUID().uuidString.prefix(6) + "_" + f.name)
+                dest = destDir.appendingPathComponent(UUID().uuidString.prefix(6) + "_" + destName)
             }
             do {
-                try fm.moveItem(at: f.url, to: dest)
+                try fm.copyItem(at: f.url, to: dest)
+                try? fm.removeItem(at: f.url)
                 ok += 1
             } catch {
-                // 忽略单个文件失败
+                if firstError.isEmpty { firstError = error.localizedDescription }
             }
         }
 
-        importStatus = "已导入 \(ok) 个文件"
         scan()
-        return importStatus
+        var msg = "收到 \(files.count) 个，导入 \(ok) 个 → \(placeDesc)"
+        if !firstError.isEmpty {
+            msg += "｜错误：\(firstError)"
+        }
+        importStatus = msg
+        return msg
     }
 }

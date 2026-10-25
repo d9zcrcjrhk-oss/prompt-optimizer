@@ -14,6 +14,7 @@ final class WebImportModel: NSObject, ObservableObject, WKScriptMessageHandler {
     @Published var progress: Double = 0
     @Published var finished = false
     @Published var failed: String?
+    @Published var actualBytes = 0
 
     private var handles: [Int: FileHandle] = [:]
     private var received: [Int: Int] = [:]
@@ -63,6 +64,14 @@ final class WebImportModel: NSObject, ObservableObject, WKScriptMessageHandler {
             handles[file] = nil
 
         case "allDone":
+            var total = 0
+            for f in files {
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: f.url.path),
+                   let size = attrs[.size] as? Int {
+                    total += size
+                }
+            }
+            actualBytes = total
             progress = 1
             status = "接收完成"
             finished = true
@@ -143,6 +152,9 @@ struct WebImportView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
+                    Text("实际接收 \(String(format: "%.2f", Double(model.actualBytes) / 1048576)) MB")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
                     ForEach(model.files.prefix(5)) { f in
                         Text("· \(f.name)")
                             .font(.system(size: 11))
@@ -210,11 +222,7 @@ struct WebImportView: View {
                     default: placement = .loose
                     }
                     let msg = library.importWebFiles(model.files, placement: placement)
-                    if msg.contains("0 个文件") {
-                        importMessage = "文件没能写入 App 目录，请重试。"
-                    } else {
-                        dismiss()
-                    }
+                    importMessage = msg
                 } label: {
                     Text("导入")
                         .font(.system(size: 16, weight: .semibold))
