@@ -29,6 +29,7 @@ struct Track: Identifiable, Hashable {
 
 struct Collection: Identifiable {
     let name: String
+    let folderURL: URL?
     let tracks: [Track]
     var id: String { name }
 }
@@ -36,20 +37,29 @@ struct Collection: Identifiable {
 final class LibraryModel: ObservableObject {
     @Published var collections: [Collection] = []
     @Published var lastTrack: Track?
+    @Published var coverRevision = 0
 
     let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
     func scan() {
         var groups: [String: [Track]] = [:]
+        var folders: [String: URL] = [:]
+
         if let en = FileManager.default.enumerator(at: docs, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
             for case let u as URL in en {
                 guard audioExtensions.contains(u.pathExtension.lowercased()) else { continue }
                 let rel = u.path.replacingOccurrences(of: docs.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 let parts = rel.components(separatedBy: "/")
-                let col = parts.count > 1 ? parts[0] : "未归类"
-                groups[col, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collection: col))
+                if parts.count > 1 {
+                    let col = parts[0]
+                    folders[col] = docs.appendingPathComponent(col)
+                    groups[col, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collection: col))
+                } else {
+                    groups["未归类", default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collection: "未归类"))
+                }
             }
         }
+
         collections = groups.keys.sorted().map { key in
             let sorted = (groups[key] ?? []).sorted { a, b in
                 let na = episodeNumber(a.name) ?? Int.max
@@ -57,7 +67,7 @@ final class LibraryModel: ObservableObject {
                 if na != nb { return na < nb }
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
             }
-            return Collection(name: key, tracks: sorted)
+            return Collection(name: key, folderURL: folders[key], tracks: sorted)
         }
         updateLastTrack()
     }
@@ -74,5 +84,39 @@ final class LibraryModel: ObservableObject {
 
     func queue(for t: Track) -> [Track] {
         collections.first { $0.name == t.collection }?.tracks ?? [t]
+    }
+
+    /// 合集封面文件：<合集文件夹>/cover.jpg
+    func coverURL(for c: Collection) -> URL? {
+        let folder = c.folderURL ?? docs
+        let u = folder.appendingPathComponent("cover.jpg")
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
+    }
+
+    func saveCover(_ data: Data, for c: Collection) {
+        let folder = c.folderURL ?? docs
+        let u = folder.appendingPathComponent("cover.jpg")
+        do {
+            try data.write(to: u)
+            coverRevision += 1
+        } catch {
+            coverRevision += 1
+        }
+    }
+
+    /// 重命名合集 = 重命名它的物理文件夹（封面会跟着走）
+    @discardableResult
+    func renameCollection(_ c: Collection, to newName: String) -> Bool {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != c.name, let old = c.folderURL else { return false }
+        let new = old.deletingLastPathComponent().appendingPathComponent(trimmed)
+        guard !FileManager.default.fileExists(atPath: new.path) else { return false }
+        do {
+            try FileManager.default.moveItem(at: old, to: new)
+            scan()
+            return true
+        } catch {
+            return false
+        }
     }
 }

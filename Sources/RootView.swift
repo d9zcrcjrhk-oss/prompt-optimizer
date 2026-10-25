@@ -1,71 +1,68 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
     @State private var showPlayer = false
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 14)
+    ]
+
     var body: some View {
         NavigationStack {
-            List {
-                if let last = library.lastTrack {
-                    Section {
-                        Button {
-                            player.play(last, queue: library.queue(for: last))
-                            showPlayer = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "play.circle.fill")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.accentColor)
-                                VStack(alignment: .leading) {
-                                    Text("继续上次").font(.headline)
-                                    Text(last.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                            }
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if let last = library.lastTrack {
+                        HeroCard(last: last)
                     }
-                }
 
-                Section("合集（\(library.collections.count)）") {
+                    Text("我的合集")
+                        .font(.title3).bold()
+                        .padding(.horizontal, 20)
+
                     if library.collections.isEmpty {
-                        Text("还没有音频。把音频文件夹放进「文件」App → 我的 iPhone → 本地听书，再点下面的重新扫描。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(library.collections) { c in
-                        NavigationLink {
-                            TrackListView(collection: c, showPlayer: $showPlayer)
-                        } label: {
-                            HStack(spacing: 12) {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.accentColor.opacity(0.15))
-                                    .frame(width: 46, height: 46)
-                                    .overlay(
-                                        Text(String(c.name.prefix(1)))
-                                            .font(.headline)
-                                            .foregroundColor(.accentColor)
-                                    )
-                                VStack(alignment: .leading) {
-                                    Text(c.name).font(.headline).lineLimit(1)
-                                    Text("\(c.tracks.count) 集").font(.caption).foregroundStyle(.secondary)
+                        VStack(spacing: 8) {
+                            Image(systemName: "folder.badge.plus")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text("还没有音频")
+                                .font(.headline)
+                            Text("把音频文件夹放进「文件」App → 我的 iPhone → 本地听书，再点下面的重新扫描。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(30)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 18) {
+                            ForEach(library.collections) { c in
+                                NavigationLink {
+                                    CollectionDetailView(collection: c, showPlayer: $showPlayer)
+                                } label: {
+                                    CollectionCard(collection: c)
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .id(library.coverRevision)
                     }
-                }
 
-                Section {
                     Button {
                         library.scan()
                     } label: {
                         Label("重新扫描", systemImage: "arrow.clockwise")
                     }
-                    Text("把音频放进：文件 App → 我的 iPhone → 本地听书，再点重新扫描。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    .padding(.horizontal, 20)
                 }
+                .padding(.top, 10)
+                .padding(.bottom, 30)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("本地听书")
             .safeAreaInset(edge: .bottom) {
                 if player.hasTrack {
@@ -80,33 +77,91 @@ struct RootView: View {
     }
 }
 
-struct TrackListView: View {
-    let collection: Collection
-    @Binding var showPlayer: Bool
+struct HeroCard: View {
+    let last: Track
     @EnvironmentObject var player: PlayerModel
+    @EnvironmentObject var library: LibraryModel
 
     var body: some View {
-        List {
-            ForEach(collection.tracks) { t in
-                Button {
-                    player.play(t, queue: collection.tracks)
-                    showPlayer = true
-                } label: {
-                    HStack {
-                        Text("\(episodeNumber(t.name) ?? 0)")
-                            .frame(width: 32)
-                            .foregroundStyle(.secondary)
-                        Text(t.name).lineLimit(1)
-                        Spacer()
-                        if player.title == t.name {
-                            Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
-                                .foregroundColor(.accentColor)
-                        }
-                    }
+        Button {
+            player.play(last, queue: library.queue(for: last))
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 52))
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("继续上次")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text(last.name)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(last.collection)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.75))
                 }
+                Spacer()
             }
+            .padding(18)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.30, green: 0.55, blue: 0.98), Color(red: 0.55, green: 0.35, blue: 0.95)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .shadow(color: Color.black.opacity(0.2), radius: 10, y: 6)
+            .padding(.horizontal, 20)
         }
-        .navigationTitle(collection.name)
+        .buttonStyle(.plain)
+    }
+}
+
+struct CollectionCard: View {
+    let collection: Collection
+    @EnvironmentObject var library: LibraryModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            cover
+                .frame(height: 150)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+
+            Text(collection.name)
+                .font(.subheadline).bold()
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+            Text("\(collection.tracks.count) 集")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var cover: some View {
+        if let path = library.coverURL(for: collection)?.path, let ui = UIImage(contentsOfFile: path) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+        } else {
+            LinearGradient(
+                colors: [Color(red: 0.55, green: 0.78, blue: 1.0), Color(red: 0.35, green: 0.52, blue: 0.95)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                Text(String(collection.name.prefix(1)))
+                    .font(.system(size: 46, weight: .bold))
+                    .foregroundStyle(.white)
+            )
+        }
     }
 }
 
