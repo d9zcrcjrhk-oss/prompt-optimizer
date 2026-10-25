@@ -14,11 +14,18 @@ enum HomeSheet: Identifiable {
     }
 }
 
+private enum SortMode: String, CaseIterable {
+    case standard = "默认"
+    case name = "名称"
+    case count = "集数"
+}
+
 struct HomeView: View {
     @Binding var tab: MainTab
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
     @State private var sheet: HomeSheet?
+    @State private var sort: SortMode = .standard
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -29,10 +36,18 @@ struct HomeView: View {
         library.collections.reduce(0) { $0 + $1.tracks.count }
     }
 
+    private var sortedCollections: [Collection] {
+        switch sort {
+        case .standard: return library.collections
+        case .name: return library.collections.sorted { $0.name < $1.name }
+        case .count: return library.collections.sorted { $0.tracks.count > $1.tracks.count }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 18) {
                     header
 
                     if let last = library.lastTrack {
@@ -42,11 +57,19 @@ struct HomeView: View {
                     }
 
                     if !player.recent.isEmpty {
-                        sectionTitle("最近聆听", "\(player.recent.count)")
+                        sectionTitle("最近聆听")
                         recentRow
                     }
 
-                    sectionTitle("全部合集", "\(library.collections.count) 部")
+                    HStack(alignment: .center) {
+                        Text("全部合集")
+                            .font(Theme.serif(17, .semibold))
+                            .foregroundStyle(Theme.text)
+                        Spacer()
+                        sortMenu
+                    }
+                    .padding(.horizontal, 20)
+
                     if library.collections.isEmpty {
                         emptyState
                     } else {
@@ -55,9 +78,9 @@ struct HomeView: View {
 
                     actions
                 }
-                .padding(.bottom, 30)
+                .padding(.bottom, 26)
             }
-            .background(Theme.bg)
+            .background(Color.clear)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $sheet) { s in
                 switch s {
@@ -82,23 +105,50 @@ struct HomeView: View {
                     .foregroundStyle(Theme.muted)
             }
             Spacer()
-            Image(systemName: "headphones")
-                .font(.system(size: 22))
-                .foregroundStyle(Theme.accent)
-                .padding(10)
-                .background(Circle().fill(Theme.accentSoft))
+            ZStack {
+                Circle().fill(.ultraThinMaterial).frame(width: 44, height: 44)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
+                    .frame(width: 44, height: 44)
+                Image(systemName: "headphones")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.accent)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
     }
 
-    private func sectionTitle(_ title: String, _ detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(Theme.serif(17, .semibold)).foregroundStyle(Theme.text)
-            Spacer()
-            Text(detail).font(.system(size: 11)).foregroundStyle(Theme.muted)
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(Theme.serif(17, .semibold))
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 20)
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(SortMode.allCases, id: \.self) { mode in
+                Button {
+                    sort = mode
+                } label: {
+                    if sort == mode {
+                        Label(mode.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(mode.rawValue)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.arrow.down").font(.system(size: 11))
+                Text(sort.rawValue).font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Theme.accentGradient))
         }
-        .padding(.horizontal, 20)
     }
 
     private var recentRow: some View {
@@ -111,17 +161,17 @@ struct HomeView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             coverTile(for: t)
-                                .frame(width: 84, height: 84)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .frame(width: 82, height: 82)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
                                 )
                             Text(t.name)
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.text)
                                 .lineLimit(1)
-                                .frame(width: 84, alignment: .leading)
+                                .frame(width: 82, alignment: .leading)
                         }
                     }
                     .buttonStyle(.plain)
@@ -141,7 +191,7 @@ struct HomeView: View {
                 ZStack {
                     Theme.coverGradient(for: t.collectionKey)
                     Text(String((library.collection(forKey: t.collectionKey)?.name ?? "?").prefix(1)))
-                        .font(Theme.serif(28, .bold))
+                        .font(Theme.serif(26, .bold))
                         .foregroundStyle(.white.opacity(0.92))
                 }
             }
@@ -150,7 +200,7 @@ struct HomeView: View {
 
     private var grid: some View {
         LazyVGrid(columns: columns, spacing: 16) {
-            ForEach(library.collections) { c in
+            ForEach(sortedCollections) { c in
                 NavigationLink {
                     CollectionDetailView(collection: c)
                 } label: {
@@ -181,8 +231,8 @@ struct HomeView: View {
         } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    Circle().fill(Theme.accentSoft).frame(width: 52, height: 52)
-                    Image(systemName: "play.fill").foregroundStyle(Theme.accent)
+                    Circle().fill(Theme.accentGradient).frame(width: 50, height: 50)
+                    Image(systemName: "play.fill").foregroundStyle(.white)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text("开始聆听").font(Theme.serif(16, .semibold)).foregroundStyle(Theme.text)
@@ -192,8 +242,7 @@ struct HomeView: View {
                 Image(systemName: "chevron.right").foregroundStyle(Theme.muted)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.accent.opacity(0.15), lineWidth: 1))
+            .glassCard(cornerRadius: 18)
             .padding(.horizontal, 20)
         }
         .buttonStyle(.plain)
@@ -203,7 +252,7 @@ struct HomeView: View {
         VStack(spacing: 10) {
             Image(systemName: "book.closed")
                 .font(.system(size: 34))
-                .foregroundStyle(Theme.accent.opacity(0.5))
+                .foregroundStyle(Theme.accent.opacity(0.6))
             Text("书架还空着").font(Theme.serif(15, .semibold)).foregroundStyle(Theme.text)
             Text("把音频文件夹放进「文件」App → 我的 iPhone → 本地听书，再点「重新扫描」。")
                 .font(.system(size: 12))
@@ -211,7 +260,7 @@ struct HomeView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 30)
+        .padding(.vertical, 28)
         .padding(.horizontal, 30)
     }
 
@@ -256,34 +305,52 @@ struct HeroCard: View {
             player.play(last, queue: library.queue(for: last))
             onPlayed()
         } label: {
-            ZStack(alignment: .bottomLeading) {
+            ZStack(alignment: .bottom) {
                 heroCover
-                    .frame(height: 168)
+                    .frame(height: 180)
                     .frame(maxWidth: .infinity)
 
                 LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.45), Color.black.opacity(0.82)],
+                    colors: [.clear, Color.black.opacity(0.30), Color.black.opacity(0.62)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("继续上次")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.8))
-                    Text(last.name)
-                        .font(Theme.serif(18, .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(collection?.name ?? "—")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.7))
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("继续上次")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.82))
+                        Text(last.name)
+                            .font(Theme.serif(17, .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(collection?.name ?? "—")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    Spacer()
+                    ZStack {
+                        Circle().fill(Theme.accentGradient).frame(width: 44, height: 44)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.white)
+                    }
                 }
-                .padding(16)
+                .padding(14)
+                .background(
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Rectangle().fill(Color.black.opacity(0.12))
+                    }
+                )
             }
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(alignment: .topTrailing) { playBadge.padding(14) }
-            .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
             .padding(.horizontal, 20)
         }
         .buttonStyle(.plain)
@@ -298,15 +365,6 @@ struct HeroCard: View {
             Theme.coverGradient(for: last.collectionKey)
         }
     }
-
-    private var playBadge: some View {
-        ZStack {
-            Circle().fill(.white.opacity(0.22)).frame(width: 40, height: 40)
-            Image(systemName: "play.fill")
-                .font(.system(size: 15))
-                .foregroundStyle(.white)
-        }
-    }
 }
 
 struct CollectionCard: View {
@@ -314,48 +372,56 @@ struct CollectionCard: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
 
+    private var progressText: String? {
+        let idx = UserDefaults.standard.integer(forKey: "ep-\(collection.id)")
+        let total = UserDefaults.standard.integer(forKey: "eptotal-\(collection.id)")
+        guard total > 0 else { return nil }
+        return "已听 \(min(idx + 1, total))/\(total)"
+    }
+
     private var isCurrent: Bool {
         player.currentCollectionKey == collection.id
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        ZStack(alignment: .bottom) {
             cover
                 .frame(height: 150)
                 .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                )
-                .overlay(alignment: .bottomLeading) {
-                    if !(isCurrent && player.duration > 0) {
-                        Text("\(collection.tracks.count) 集")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.black.opacity(0.35)))
-                            .padding(8)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if isCurrent && player.duration > 0 {
-                        ProgressView(value: player.current, total: max(player.duration, 1))
-                            .tint(Theme.accent)
-                            .padding(.horizontal, 8)
-                            .padding(.bottom, 8)
-                    }
-                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            Text(collection.name)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.text)
-                .lineLimit(1)
-            Text("\(collection.tracks.count) 集")
-                .font(.system(size: 10))
-                .foregroundStyle(Theme.muted)
+            if isCurrent, player.duration > 0 {
+                ProgressView(value: player.current, total: max(player.duration, 1))
+                    .tint(Theme.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 40)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(collection.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(progressText ?? "\(collection.tracks.count) 集")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Rectangle().fill(Color.black.opacity(0.18))
+                }
+            )
         }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
     }
 
     @ViewBuilder private var cover: some View {
@@ -444,6 +510,7 @@ struct CoverSheet: View {
                     Label("从相册选择图片", systemImage: "photo")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Theme.accent)
 
                 if busy { ProgressView() }
 

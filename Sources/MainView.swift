@@ -11,7 +11,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            Theme.bg.ignoresSafeArea()
+            AuroraBackground()
 
             VStack(spacing: 0) {
                 Group {
@@ -32,6 +32,7 @@ struct MainView: View {
 
 struct BottomBar: View {
     @Binding var tab: MainTab
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -67,7 +68,11 @@ struct BottomBar: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.ultraThinMaterial)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.white.opacity(scheme == .dark ? 0.16 : 0.65))
+                .frame(height: 0.5)
+        }
     }
 }
 
@@ -85,9 +90,7 @@ struct SpinningCover: View {
     var body: some View {
         ZStack {
             coverContent
-
-            Circle().stroke(Theme.accent.opacity(0.6), lineWidth: 1.5)
-
+            Circle().stroke(Theme.accent.opacity(0.7), lineWidth: 1.5)
             Circle().fill(Theme.accent).frame(width: 5, height: 5)
         }
         .frame(width: 46, height: 46)
@@ -112,7 +115,7 @@ struct SpinningCover: View {
             }
         } else {
             ZStack {
-                Theme.accentSoft
+                Theme.accent.opacity(0.18)
                 Image(systemName: "music.note").foregroundStyle(Theme.accent)
             }
         }

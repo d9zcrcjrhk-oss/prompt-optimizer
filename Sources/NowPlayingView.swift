@@ -17,20 +17,45 @@ struct NowPlayingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
+        ZStack {
+            if let ui = coverImage {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .blur(radius: 55)
+                    .opacity(0.65)
+                    .ignoresSafeArea()
+            } else {
+                Theme.accentGradient.ignoresSafeArea()
+            }
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    coverArt
-                    titleBlock
-                    progressBlock
-                    controls
-                    contentCard
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.28),
+                    Color.black.opacity(0.50),
+                    Color.black.opacity(0.72)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        coverArt
+                        titleBlock
+                        episodeChip
+                        progressBlock
+                        controls
+                        contentCard
+                    }
+                    .padding(.horizontal, 26)
+                    .padding(.top, 6)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 26)
-                .padding(.top, 8)
-                .padding(.bottom, 24)
             }
         }
         .sheet(isPresented: $showTools) {
@@ -47,14 +72,16 @@ struct NowPlayingView: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(Theme.onDark)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
             }
 
             Spacer()
 
             Text("正在播放")
                 .font(Theme.serif(14, .semibold))
-                .foregroundStyle(Theme.text)
+                .foregroundStyle(Theme.onDark.opacity(0.9))
 
             Spacer()
 
@@ -62,12 +89,14 @@ struct NowPlayingView: View {
                 showTools = true
             } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(Theme.onDark)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
     }
 
     private var coverArt: some View {
@@ -84,20 +113,43 @@ struct NowPlayingView: View {
             }
         }
         .frame(width: 210, height: 210)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.55), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.35), radius: 22, y: 12)
     }
 
     private var titleBlock: some View {
         VStack(spacing: 4) {
             Text(player.title.isEmpty ? "未播放" : player.title)
                 .font(Theme.serif(20, .semibold))
-                .foregroundStyle(Theme.text)
+                .foregroundStyle(Theme.onDark)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
             Text(collection?.name ?? "—")
                 .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
+                .foregroundStyle(Theme.onDarkMuted)
+        }
+    }
+
+    @ViewBuilder private var episodeChip: some View {
+        if player.queueTotal > 0 {
+            Text("第 \(player.queueIndex + 1) 集 · 共 \(player.queueTotal) 集")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.onDark)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(.ultraThinMaterial))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
         }
     }
 
@@ -107,12 +159,16 @@ struct NowPlayingView: View {
                 value: Binding(get: { player.current }, set: { player.seek(to: $0) }),
                 in: 0...max(player.duration, 1)
             )
-            .tint(Theme.accent)
+            .tint(.white)
 
             HStack {
-                Text(fmt(player.current)).font(.system(size: 11)).foregroundStyle(Theme.muted)
+                Text(fmt(player.current))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.onDarkMuted)
                 Spacer()
-                Text(fmt(player.duration)).font(.system(size: 11)).foregroundStyle(Theme.muted)
+                Text(fmt(player.duration))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.onDarkMuted)
             }
         }
     }
@@ -124,18 +180,19 @@ struct NowPlayingView: View {
             } label: {
                 Image(systemName: "backward.end.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(Theme.onDark)
             }
 
             Button {
                 player.toggle()
             } label: {
                 ZStack {
-                    Circle().fill(Theme.accent).frame(width: 68, height: 68)
+                    Circle().fill(Theme.accentGradient).frame(width: 70, height: 70)
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 26))
+                        .font(.system(size: 27))
                         .foregroundStyle(.white)
                 }
+                .shadow(color: Theme.accent.opacity(0.5), radius: 16, y: 8)
             }
 
             Button {
@@ -143,7 +200,7 @@ struct NowPlayingView: View {
             } label: {
                 Image(systemName: "forward.end.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(Theme.onDark)
             }
         }
         .padding(.vertical, 4)
@@ -153,17 +210,17 @@ struct NowPlayingView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("内容")
                 .font(.system(size: 11))
-                .foregroundStyle(Theme.muted)
+                .foregroundStyle(Theme.onDarkMuted)
 
             Text("此处暂时没有内容")
                 .font(Theme.serif(14))
-                .foregroundStyle(Theme.text.opacity(0.8))
+                .foregroundStyle(Theme.onDark)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 18)
+                .padding(.vertical, 20)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
+        .glassCard(cornerRadius: 18)
     }
 
     private var firstChar: String {

@@ -13,6 +13,8 @@ final class PlayerModel: ObservableObject {
     @Published var sleepMode: SleepMode = .none
     @Published var sleepRemaining: Int = 0
     @Published var recent: [Track] = []
+    @Published var queueIndex = 0
+    @Published var queueTotal = 0
 
     enum SleepMode: Equatable {
         case none
@@ -50,6 +52,7 @@ final class PlayerModel: ObservableObject {
         currentCollectionKey = track.collectionKey
         recent = [track] + recent.filter { $0.id != track.id }
         if recent.count > 12 { recent = Array(recent.prefix(12)) }
+        refreshQueueInfo(for: track)
         let item = AVPlayerItem(url: track.url)
         player = AVPlayer(playerItem: item)
         addTimeObserver()
@@ -63,6 +66,13 @@ final class PlayerModel: ObservableObject {
         observeEnd()
         updateNowPlaying()
         UserDefaults.standard.set(track.url.path, forKey: "lastTrackPath")
+    }
+
+    private func refreshQueueInfo(for track: Track) {
+        queueIndex = index
+        queueTotal = queue.count
+        UserDefaults.standard.set(index, forKey: "ep-\(track.collectionKey)")
+        UserDefaults.standard.set(queue.count, forKey: "eptotal-\(track.collectionKey)")
     }
 
     func toggle() {

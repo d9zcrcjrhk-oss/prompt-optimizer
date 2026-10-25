@@ -14,7 +14,7 @@ struct CollectionDetailView: View {
             }
             .padding(.bottom, 30)
         }
-        .background(Theme.bg)
+        .background(Color.clear)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -22,8 +22,12 @@ struct CollectionDetailView: View {
         VStack(spacing: 12) {
             coverView
                 .frame(width: 180, height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.2), radius: 18, y: 10)
 
             Text(collection.name)
                 .font(Theme.serif(22, .bold))
@@ -62,9 +66,13 @@ struct CollectionDetailView: View {
                                 .foregroundStyle(Theme.accent)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(player.title == t.name ? Theme.accentSoft : Color.clear)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(player.title == t.name ? Theme.accent.opacity(0.14) : Color.white.opacity(0.0))
+                    )
+                    .padding(.horizontal, 8)
                 }
                 .buttonStyle(.plain)
             }
