@@ -1,11 +1,44 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 let audioExtensions: Set<String> = ["mp3", "m4a", "wav", "flac", "aac", "aiff", "m4b", "caf", "mp4", "ogg", "opus", "wma"]
 
+/// 直接从当前 UIViewController 弹出系统文件夹选择器（避免 SwiftUI .sheet 吞掉回调）
+final class IOSFolderPicker: NSObject, UIDocumentPickerDelegate {
+    static let shared = IOSFolderPicker()
+    private var completion: ((URL?) -> Void)?
+
+    func present(completion: @escaping (URL?) -> Void) {
+        self.completion = completion
+        guard
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+            let root = scene.keyWindow?.rootViewController
+        else {
+            completion(nil)
+            return
+        }
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        root.present(picker, animated: true)
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        completion?(urls.first)
+        completion = nil
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        completion?(nil)
+        completion = nil
+    }
+}
+
 struct RootView: View {
     @EnvironmentObject var player: PlayerModel
-    @State private var showFolderPicker = false
     @State private var showFilePicker = false
     @State private var files: [URL] = []
     @State private var folderName = ""
@@ -16,7 +49,7 @@ struct RootView: View {
             List {
                 Section("导入音频") {
                     Button {
-                        showFolderPicker = true
+                        pickFolder()
                     } label: {
                         Label("导入整个文件夹", systemImage: "folder.badge.plus")
                     }
@@ -63,14 +96,14 @@ struct RootView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-            .navigationTitle("本地听书")
-            .sheet(isPresented: $showFolderPicker) {
-                FolderPicker { url in
-                    showFolderPicker = false
-                    loadFolder(url)
+
+                Section {
+                    Text("版本 v2 · 新增加：文件多选 / 递归扫描子文件夹")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .navigationTitle("本地听书")
             .fileImporter(
                 isPresented: $showFilePicker,
                 allowedContentTypes: [.audio],
@@ -90,29 +123,50 @@ struct RootView: View {
         }
     }
 
+    private func pickFolder() {
+        IOSFolderPicker.shared.present { url in
+            guard let url = url else {
+                message = "已取消选择"
+                return
+            }
+            loadFolder(url)
+        }
+    }
+
+    private func audioFiles(in folder: URL) -> [URL] {
+        var result: [URL] = []
+        if let en = FileManager.default.enumerator(
+            at: folder,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let u as URL in en {
+                if audioExtensions.contains(u.pathExtension.lowercased()) {
+                    result.append(u)
+                }
+            }
+        }
+        return result.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
+
     private func loadFolder(_ url: URL) {
         guard url.startAccessingSecurityScopedResource() else {
             message = "无法访问该文件夹（权限不足）"
             return
         }
-        do {
-            let items = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
-            let audio = items
-                .filter { audioExtensions.contains($0.pathExtension.lowercased()) }
-                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-            if audio.isEmpty {
-                message = "该文件夹里没找到音频文件"
-                return
-            }
-            files = audio
-            folderName = "\(url.lastPathComponent)（\(files.count) 个）"
-            message = ""
-            if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
-                UserDefaults.standard.set(data, forKey: "folderBookmark")
-                UserDefaults.standard.removeObject(forKey: "fileBookmarks")
-            }
-        } catch {
-            message = "读取失败：\(error.localizedDescription)"
+        let audio = audioFiles(in: url)
+        if audio.isEmpty {
+            message = "该文件夹（含子文件夹）里没找到音频文件"
+            return
+        }
+        files = audio
+        folderName = "\(url.lastPathComponent)（含子文件夹，共 \(files.count) 个）"
+        message = ""
+        if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+            UserDefaults.standard.set(data, forKey: "folderBookmark")
+            UserDefaults.standard.removeObject(forKey: "fileBookmarks")
         }
     }
 
@@ -130,7 +184,9 @@ struct RootView: View {
             message = "没有可读取的音频（权限不足）"
             return
         }
-        files = ok.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        files = ok.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
         folderName = "已选文件（\(files.count) 个）"
         message = ""
         UserDefaults.standard.set(bookmarks, forKey: "fileBookmarks")
@@ -139,21 +195,14 @@ struct RootView: View {
 
     private func scanAppDocuments() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        do {
-            let items = try FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil)
-            let audio = items
-                .filter { audioExtensions.contains($0.pathExtension.lowercased()) }
-                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-            if audio.isEmpty {
-                message = "App 文件夹里没有音频。可在「文件」App → 我的 iPhone → 本地听书 里拖入文件"
-                return
-            }
-            files = audio
-            folderName = "App 文件夹（\(files.count) 个）"
-            message = ""
-        } catch {
-            message = "读取 App 文件夹失败：\(error.localizedDescription)"
+        let audio = audioFiles(in: docs)
+        if audio.isEmpty {
+            message = "App 文件夹里没有音频。可在「文件」App → 我的 iPhone → 本地听书 里拖入文件"
+            return
         }
+        files = audio
+        folderName = "App 文件夹（\(files.count) 个）"
+        message = ""
     }
 
     private func restore() {
