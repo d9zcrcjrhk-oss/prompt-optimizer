@@ -84,6 +84,7 @@ struct WebImportView: View {
     @State private var mode = 0
     @State private var newName = ""
     @State private var existingId = ""
+    @State private var importMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -208,8 +209,12 @@ struct WebImportView: View {
                     case 1: placement = .existing(existingId)
                     default: placement = .loose
                     }
-                    _ = library.importWebFiles(model.files, placement: placement)
-                    dismiss()
+                    let msg = library.importWebFiles(model.files, placement: placement)
+                    if msg.contains("0 个文件") {
+                        importMessage = "文件没能写入 App 目录，请重试。"
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     Text("导入")
                         .font(.system(size: 16, weight: .semibold))
@@ -233,6 +238,14 @@ struct WebImportView: View {
             if existingId.isEmpty, let first = library.collections.first {
                 existingId = first.id
             }
+        }
+        .alert("导入结果", isPresented: Binding(
+            get: { importMessage != nil },
+            set: { if !$0 { importMessage = nil } }
+        )) {
+            Button("好") { dismiss() }
+        } message: {
+            Text(importMessage ?? "")
         }
     }
 }

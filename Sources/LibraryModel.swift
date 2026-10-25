@@ -1,7 +1,12 @@
 import Foundation
 import Combine
 
-let audioExtensions: Set<String> = ["mp3", "m4a", "wav", "flac", "aac", "aiff", "m4b", "caf", "mp4", "ogg", "opus", "wma", "m4r"]
+let audioExtensions: Set<String> = [
+    "mp3", "m4a", "m4b", "m4p", "m4r", "mp2",
+    "wav", "wave", "aif", "aifc", "aiff", "caf",
+    "flac", "alac", "ape", "aac", "ogg", "oga", "opus",
+    "wma", "amr", "3gp", "dsf", "dff", "wv", "webm", "mp4"
+]
 
 func episodeNumber(_ name: String) -> Int? {
     var digits = ""
