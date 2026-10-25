@@ -16,6 +16,7 @@ enum HomeSheet: Identifiable {
 }
 
 struct HomeView: View {
+    @Binding var tab: MainTab
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
     @State private var sheet: HomeSheet?
@@ -30,7 +31,7 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if let last = library.lastTrack {
-                        HeroCard(last: last)
+                        HeroCard(last: last) { tab = .playing }
                     }
 
                     Text("我的合集")
@@ -114,6 +115,7 @@ struct HomeView: View {
 
 struct HeroCard: View {
     let last: Track
+    let onPlayed: () -> Void
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
 
@@ -124,6 +126,7 @@ struct HeroCard: View {
     var body: some View {
         Button {
             player.play(last, queue: library.queue(for: last))
+            onPlayed()
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: "play.circle.fill")

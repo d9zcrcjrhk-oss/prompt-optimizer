@@ -27,6 +27,13 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio File
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.audio
+              - public.mp3
+              - public.mpeg-4-audio
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.local.audiobook.player

@@ -17,6 +17,9 @@ struct AudioPlayerApp: App {
             MainView()
                 .environmentObject(player)
                 .environmentObject(library)
+                .onOpenURL { url in
+                    library.receiveFile(url)
+                }
         }
     }
 }

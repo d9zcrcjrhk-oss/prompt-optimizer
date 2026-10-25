@@ -13,7 +13,7 @@ struct MainView: View {
         VStack(spacing: 0) {
             Group {
                 if tab == .home {
-                    HomeView()
+                    HomeView(tab: $tab)
                 } else {
                     NowPlayingView()
                 }
