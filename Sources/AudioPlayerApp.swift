@@ -4,6 +4,7 @@ import AVFoundation
 @main
 struct AudioPlayerApp: App {
     @StateObject private var player = PlayerModel()
+    @StateObject private var library = LibraryModel()
 
     init() {
         let session = AVAudioSession.sharedInstance()
@@ -15,6 +16,7 @@ struct AudioPlayerApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(player)
+                .environmentObject(library)
         }
     }
 }
