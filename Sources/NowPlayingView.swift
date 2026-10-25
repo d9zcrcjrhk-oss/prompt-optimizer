@@ -1,11 +1,23 @@
 import SwiftUI
 import UIKit
 
+private enum PlayerSheet: Identifiable {
+    case tools
+    case episodes
+
+    var id: Int {
+        switch self {
+        case .tools: return 0
+        case .episodes: return 1
+        }
+    }
+}
+
 struct NowPlayingView: View {
     @Binding var tab: MainTab
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
-    @State private var showTools = false
+    @State private var sheet: PlayerSheet?
     @State private var showContent = false
 
     private var collection: Collection? {
@@ -33,16 +45,27 @@ struct NowPlayingView: View {
             if showContent {
                 Color.clear.frame(height: 10)
             } else {
-                contentToggle
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
+                HStack(spacing: 10) {
+                    contentToggle
+                    episodeToggle
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 12)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: showContent)
-        .sheet(isPresented: $showTools) {
-            PlayerToolsSheet()
-                .environmentObject(player)
-                .environmentObject(library)
+        .sheet(item: $sheet) { s in
+            switch s {
+            case .tools:
+                PlayerToolsSheet()
+                    .environmentObject(player)
+            case .episodes:
+                if let c = collection {
+                    EpisodeSheet(collection: c)
+                        .environmentObject(player)
+                        .environmentObject(library)
+                }
+            }
         }
     }
 
@@ -65,14 +88,14 @@ struct NowPlayingView: View {
             Spacer(minLength: 0)
 
             Text("正在播放")
-                .font(Theme.serif(14, .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Theme.onDark.opacity(0.9))
                 .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
 
             Spacer(minLength: 0)
 
             Button {
-                showTools = true
+                sheet = .tools
             } label: {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundStyle(Theme.onDark)
@@ -112,7 +135,7 @@ struct NowPlayingView: View {
     private var titleBlock: some View {
         VStack(spacing: 4) {
             Text(player.title.isEmpty ? "未播放" : player.title)
-                .font(Theme.serif(19, .semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(Theme.onDark)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -142,7 +165,7 @@ struct NowPlayingView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(player.title.isEmpty ? "未播放" : player.title)
-                    .font(Theme.serif(15, .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.onDark)
                     .lineLimit(1)
                 Text(collection?.name ?? "—")
@@ -177,7 +200,7 @@ struct NowPlayingView: View {
                 .font(.system(size: 28))
                 .foregroundStyle(Theme.onDarkMuted.opacity(0.55))
             Text("暂时没有内容")
-                .font(Theme.serif(16, .medium))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Theme.onDark)
             Text("文稿会显示在这里")
                 .font(.system(size: 12))
@@ -188,18 +211,36 @@ struct NowPlayingView: View {
         .padding(.horizontal, 30)
     }
 
-    // MARK: - 文稿按钮
+    // MARK: - 底部两个按钮
 
     private var contentToggle: some View {
         Button {
             showContent = true
         } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "doc.text").font(.system(size: 14, weight: .medium))
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text").font(.system(size: 13, weight: .medium))
                 Text("文稿").font(.system(size: 13, weight: .medium))
             }
             .foregroundStyle(Theme.onDark)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(Color.black.opacity(0.3)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var episodeToggle: some View {
+        Button {
+            sheet = .episodes
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "list.number").font(.system(size: 13, weight: .medium))
+                Text("选集").font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Theme.onDark)
+            .padding(.horizontal, 15)
             .padding(.vertical, 9)
             .background(Capsule().fill(Color.black.opacity(0.3)))
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
@@ -218,7 +259,7 @@ struct NowPlayingView: View {
                 ZStack {
                     Theme.coverGradient(for: player.currentCollectionKey)
                     Text(firstChar)
-                        .font(Theme.serif(size * 0.32, .bold))
+                        .font(.system(size: size * 0.32, weight: .bold))
                         .foregroundStyle(.white.opacity(0.92))
                 }
             }
@@ -297,7 +338,6 @@ struct NowPlayingView: View {
 
 struct PlayerToolsSheet: View {
     @EnvironmentObject var player: PlayerModel
-    @EnvironmentObject var library: LibraryModel
     @Environment(\.dismiss) private var dismiss
     @State private var sleepMode = 0
     @State private var sleepMinutes = 30
@@ -341,31 +381,6 @@ struct PlayerToolsSheet: View {
                         Button("取消定时", role: .destructive) { player.cancelSleep() }
                     }
                 }
-
-                if let c = currentCollection {
-                    Section("选集（\(c.tracks.count) 集）") {
-                        ForEach(c.tracks) { t in
-                            Button {
-                                player.play(t, queue: c.tracks)
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Text("\(episodeNumber(t.name) ?? 0)")
-                                        .frame(width: 30, alignment: .trailing)
-                                        .foregroundStyle(Theme.muted)
-                                    Text(t.name)
-                                        .lineLimit(1)
-                                        .foregroundStyle(player.title == t.name ? Theme.accent : Theme.text)
-                                    Spacer()
-                                    if player.title == t.name {
-                                        Image(systemName: "speaker.wave.2.fill")
-                                            .foregroundStyle(Theme.accent)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
             .navigationTitle("播放设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -375,10 +390,8 @@ struct PlayerToolsSheet: View {
                 }
             }
         }
-    }
-
-    private var currentCollection: Collection? {
-        library.collection(forKey: player.currentCollectionKey)
+        .preferredColorScheme(.dark)
+        .tint(Theme.accent)
     }
 
     private var sleepStatus: String {
