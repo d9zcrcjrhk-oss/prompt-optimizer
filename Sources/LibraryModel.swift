@@ -401,9 +401,14 @@ final class LibraryModel: ObservableObject {
         }
 
         scan()
+
+        let dirCount = (try? fm.contentsOfDirectory(atPath: destDir.path))?.count ?? -1
+        let names = collections.prefix(6).map { $0.name }.joined(separator: "、")
         var msg = "收到 \(files.count) 个，导入 \(ok) 个 → \(placeDesc)"
+        msg += "\n目录内 \(dirCount) 个文件"
+        msg += "\n合集 \(collections.count) 部：\(names)"
         if !firstError.isEmpty {
-            msg += "｜错误：\(firstError)"
+            msg += "\n错误：\(firstError)"
         }
         importStatus = msg
         return msg
