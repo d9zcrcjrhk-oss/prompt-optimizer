@@ -7,45 +7,35 @@ struct CollectionDetailView: View {
     @EnvironmentObject var library: LibraryModel
 
     var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    coverHeader
-                    trackList
-                }
-                .padding(.bottom, 40)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                trackList
             }
+            .padding(.bottom, 30)
         }
+        .background(Theme.bg)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.ink, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .tint(Theme.gold)
     }
 
-    private var coverHeader: some View {
-        VStack(spacing: 14) {
+    private var header: some View {
+        VStack(spacing: 12) {
             coverView
-                .frame(width: 200, height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 22))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(Theme.gold.opacity(0.3), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
+                .frame(width: 180, height: 180)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
 
             Text(collection.name)
-                .font(Theme.serif(24, .bold))
+                .font(Theme.serif(22, .bold))
                 .foregroundStyle(Theme.text)
 
             Text("\(collection.tracks.count) 集")
-                .font(Theme.serif(12))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 20)
-        .padding(.bottom, 24)
+        .padding(.top, 14)
+        .padding(.bottom, 20)
     }
 
     private var trackList: some View {
@@ -56,25 +46,25 @@ struct CollectionDetailView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Text("\(episodeNumber(t.name) ?? 0)")
-                            .font(Theme.serif(12))
-                            .foregroundStyle(player.title == t.name ? Theme.gold : Theme.muted)
+                            .font(.system(size: 12))
+                            .foregroundStyle(player.title == t.name ? Theme.accent : Theme.muted)
                             .frame(width: 34, alignment: .trailing)
 
                         Text(t.name)
-                            .font(Theme.serif(15))
-                            .foregroundStyle(player.title == t.name ? Theme.gold : Theme.text)
+                            .font(.system(size: 15))
+                            .foregroundStyle(player.title == t.name ? Theme.accent : Theme.text)
                             .lineLimit(1)
 
                         Spacer()
 
                         if player.title == t.name {
                             Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
-                                .foregroundStyle(Theme.gold)
+                                .foregroundStyle(Theme.accent)
                         }
                     }
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, 20)
                     .padding(.vertical, 12)
-                    .background(player.title == t.name ? Theme.gold.opacity(0.08) : Color.clear)
+                    .background(player.title == t.name ? Theme.accentSoft : Color.clear)
                 }
                 .buttonStyle(.plain)
             }
@@ -87,10 +77,10 @@ struct CollectionDetailView: View {
             Image(uiImage: ui).resizable().scaledToFill()
         } else {
             ZStack {
-                Theme.coverFallback
+                Theme.coverGradient(for: collection.id)
                 Text(String(collection.name.prefix(1)))
-                    .font(Theme.serif(70, .bold))
-                    .foregroundStyle(Theme.goldSoft.opacity(0.85))
+                    .font(Theme.serif(64, .bold))
+                    .foregroundStyle(.white.opacity(0.92))
             }
         }
     }

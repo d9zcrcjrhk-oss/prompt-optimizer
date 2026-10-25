@@ -12,6 +12,7 @@ final class PlayerModel: ObservableObject {
     @Published var currentCollectionKey = ""
     @Published var sleepMode: SleepMode = .none
     @Published var sleepRemaining: Int = 0
+    @Published var recent: [Track] = []
 
     enum SleepMode: Equatable {
         case none
@@ -47,6 +48,8 @@ final class PlayerModel: ObservableObject {
         currentURL = track.url
         title = track.name
         currentCollectionKey = track.collectionKey
+        recent = [track] + recent.filter { $0.id != track.id }
+        if recent.count > 12 { recent = Array(recent.prefix(12)) }
         let item = AVPlayerItem(url: track.url)
         player = AVPlayer(playerItem: item)
         addTimeObserver()

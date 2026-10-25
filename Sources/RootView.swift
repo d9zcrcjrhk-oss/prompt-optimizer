@@ -20,32 +20,33 @@ struct HomeView: View {
     @EnvironmentObject var library: LibraryModel
     @State private var sheet: HomeSheet?
 
-    private static let quotes = [
-        "把故事，听成自己的。",
-        "夜读 · 声里藏卷。",
-        "一页一页，听进心里。",
-        "书声入梦来。",
-        "灯火可亲，书声可听。"
-    ]
-    @State private var quote = HomeView.quotes.randomElement() ?? "把故事，听成自己的。"
-
     private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
+        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 14)
     ]
+
+    private var totalEpisodes: Int {
+        library.collections.reduce(0) { $0 + $1.tracks.count }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 20) {
                     header
 
                     if let last = library.lastTrack {
                         HeroCard(last: last) { tab = .playing }
+                    } else {
+                        startPrompt
                     }
 
-                    sectionTitle("书架", "\(library.collections.count) 卷")
+                    if !player.recent.isEmpty {
+                        sectionTitle("最近聆听", "\(player.recent.count)")
+                        recentRow
+                    }
 
+                    sectionTitle("全部合集", "\(library.collections.count) 部")
                     if library.collections.isEmpty {
                         emptyState
                     } else {
@@ -54,9 +55,9 @@ struct HomeView: View {
 
                     actions
                 }
-                .padding(.bottom, 36)
+                .padding(.bottom, 30)
             }
-            .background(Theme.background)
+            .background(Theme.bg)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $sheet) { s in
                 switch s {
@@ -68,33 +69,87 @@ struct HomeView: View {
             }
             .task { library.scan() }
         }
-        .tint(Theme.gold)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("本地听书")
-                .font(Theme.serif(30, .bold))
-                .foregroundStyle(Theme.text)
-            Text(quote)
-                .font(Theme.serif(13))
-                .foregroundStyle(Theme.muted)
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("我的书架")
+                    .font(Theme.serif(28, .bold))
+                    .foregroundStyle(Theme.text)
+                Text("共 \(library.collections.count) 部 · \(totalEpisodes) 集")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer()
+            Image(systemName: "headphones")
+                .font(.system(size: 22))
+                .foregroundStyle(Theme.accent)
+                .padding(10)
+                .background(Circle().fill(Theme.accentSoft))
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 18)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
     }
 
     private func sectionTitle(_ title: String, _ detail: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(Theme.serif(18, .semibold)).foregroundStyle(Theme.text)
+            Text(title).font(Theme.serif(17, .semibold)).foregroundStyle(Theme.text)
             Spacer()
-            Text(detail).font(Theme.serif(11)).foregroundStyle(Theme.muted)
+            Text(detail).font(.system(size: 11)).foregroundStyle(Theme.muted)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 20)
+    }
+
+    private var recentRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(player.recent) { t in
+                    Button {
+                        player.play(t, queue: library.queue(for: t))
+                        tab = .playing
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            coverTile(for: t)
+                                .frame(width: 84, height: 84)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                                )
+                            Text(t.name)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.text)
+                                .lineLimit(1)
+                                .frame(width: 84, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func coverTile(for t: Track) -> some View {
+        Group {
+            if let c = library.collection(forKey: t.collectionKey),
+               let path = library.coverURL(for: c)?.path,
+               let ui = UIImage(contentsOfFile: path) {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    Theme.coverGradient(for: t.collectionKey)
+                    Text(String((library.collection(forKey: t.collectionKey)?.name ?? "?").prefix(1)))
+                        .font(Theme.serif(28, .bold))
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+            }
+        }
     }
 
     private var grid: some View {
-        LazyVGrid(columns: columns, spacing: 20) {
+        LazyVGrid(columns: columns, spacing: 16) {
             ForEach(library.collections) { c in
                 NavigationLink {
                     CollectionDetailView(collection: c)
@@ -116,50 +171,73 @@ struct HomeView: View {
                 }
             }
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, 20)
         .id(library.coverRevision)
     }
 
+    private var startPrompt: some View {
+        Button {
+            tab = .playing
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(Theme.accentSoft).frame(width: 52, height: 52)
+                    Image(systemName: "play.fill").foregroundStyle(Theme.accent)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("开始聆听").font(Theme.serif(16, .semibold)).foregroundStyle(Theme.text)
+                    Text("选一个合集，从第一集开始。").font(.system(size: 12)).foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(Theme.muted)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.accent.opacity(0.15), lineWidth: 1))
+            .padding(.horizontal, 20)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Image(systemName: "book.closed")
-                .font(.system(size: 38))
-                .foregroundStyle(Theme.gold.opacity(0.5))
-            Text("书架还空着")
-                .font(Theme.serif(16, .semibold))
-                .foregroundStyle(Theme.text)
+                .font(.system(size: 34))
+                .foregroundStyle(Theme.accent.opacity(0.5))
+            Text("书架还空着").font(Theme.serif(15, .semibold)).foregroundStyle(Theme.text)
             Text("把音频文件夹放进「文件」App → 我的 iPhone → 本地听书，再点「重新扫描」。")
-                .font(Theme.serif(12))
+                .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(30)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 30)
     }
 
     private var actions: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Button {
                 library.scan()
             } label: {
                 Label("重新扫描", systemImage: "arrow.clockwise")
-                    .font(Theme.serif(13))
-                    .foregroundStyle(Theme.gold)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.accent)
             }
 
-            Text("长按合集，可重命名或换封面。")
-                .font(Theme.serif(11))
-                .foregroundStyle(Theme.muted.opacity(0.85))
+            Text("长按合集可重命名 / 换封面")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
 
             if !library.importStatus.isEmpty {
                 Text(library.importStatus)
-                    .font(Theme.serif(11))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 30)
-        .padding(.top, 4)
+        .padding(.top, 6)
     }
 }
 
@@ -180,34 +258,33 @@ struct HeroCard: View {
         } label: {
             ZStack(alignment: .bottomLeading) {
                 heroCover
-                    .frame(height: 190)
+                    .frame(height: 168)
                     .frame(maxWidth: .infinity)
 
                 LinearGradient(
-                    colors: [.clear, Theme.ink.opacity(0.5), Theme.ink.opacity(0.95)],
+                    colors: [.clear, Color.black.opacity(0.45), Color.black.opacity(0.82)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("续 · 昨夜未听完的")
-                        .font(Theme.serif(11))
-                        .foregroundStyle(Theme.goldSoft)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("继续上次")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.8))
                     Text(last.name)
-                        .font(Theme.serif(19, .semibold))
-                        .foregroundStyle(Theme.text)
+                        .font(Theme.serif(18, .semibold))
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                     Text(collection?.name ?? "—")
-                        .font(Theme.serif(11))
-                        .foregroundStyle(Theme.muted)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.7))
                 }
-                .padding(18)
+                .padding(16)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .overlay(alignment: .topTrailing) { playBadge.padding(16) }
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.gold.opacity(0.25), lineWidth: 1))
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 12)
-            .padding(.horizontal, 22)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(alignment: .topTrailing) { playBadge.padding(14) }
+            .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+            .padding(.horizontal, 20)
         }
         .buttonStyle(.plain)
     }
@@ -218,49 +295,66 @@ struct HeroCard: View {
            let ui = UIImage(contentsOfFile: path) {
             Image(uiImage: ui).resizable().scaledToFill()
         } else {
-            Theme.coverFallback
+            Theme.coverGradient(for: last.collectionKey)
         }
     }
 
     private var playBadge: some View {
         ZStack {
-            Circle().fill(Theme.gold).frame(width: 46, height: 46)
+            Circle().fill(.white.opacity(0.22)).frame(width: 40, height: 40)
             Image(systemName: "play.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(Theme.ink)
+                .font(.system(size: 15))
+                .foregroundStyle(.white)
         }
     }
 }
 
 struct CollectionCard: View {
     let collection: Collection
+    @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                cover
-                    .frame(height: 160)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Theme.gold.opacity(0.16), lineWidth: 1)
-                    )
+    private var isCurrent: Bool {
+        player.currentCollectionKey == collection.id
+    }
 
-                Text("\(collection.tracks.count)")
-                    .font(Theme.serif(11, .semibold))
-                    .foregroundStyle(Theme.goldSoft)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.black.opacity(0.45)))
-                    .padding(8)
-            }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            cover
+                .frame(height: 150)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                )
+                .overlay(alignment: .bottomLeading) {
+                    if !(isCurrent && player.duration > 0) {
+                        Text("\(collection.tracks.count) 集")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.black.opacity(0.35)))
+                            .padding(8)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if isCurrent && player.duration > 0 {
+                        ProgressView(value: player.current, total: max(player.duration, 1))
+                            .tint(Theme.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.bottom, 8)
+                    }
+                }
 
             Text(collection.name)
-                .font(Theme.serif(14, .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.text)
                 .lineLimit(1)
+            Text("\(collection.tracks.count) 集")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.muted)
         }
     }
 
@@ -270,10 +364,10 @@ struct CollectionCard: View {
             Image(uiImage: ui).resizable().scaledToFill()
         } else {
             ZStack {
-                Theme.coverFallback
+                Theme.coverGradient(for: collection.id)
                 Text(String(collection.name.prefix(1)))
-                    .font(Theme.serif(40, .bold))
-                    .foregroundStyle(Theme.goldSoft.opacity(0.85))
+                    .font(Theme.serif(38, .bold))
+                    .foregroundStyle(.white.opacity(0.92))
             }
         }
     }
@@ -291,40 +385,27 @@ struct RenameSheet: View {
     }
 
     var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 18) {
-                Text("重命名")
-                    .font(Theme.serif(20, .semibold))
-                    .foregroundStyle(Theme.text)
-
-                TextField("输入新名称", text: $name)
-                    .font(Theme.serif(16))
-                    .foregroundStyle(Theme.text)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.gold.opacity(0.2), lineWidth: 1))
-
-                HStack {
+        NavigationStack {
+            Form {
+                Section("合集名称") {
+                    TextField("输入新名称", text: $name)
+                }
+            }
+            .navigationTitle("重命名")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
-                        .foregroundStyle(Theme.muted)
-                    Spacer()
+                }
+                ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         _ = library.renameCollection(collection, to: name)
                         dismiss()
                     }
-                    .foregroundStyle(Theme.gold)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .font(Theme.serif(15, .semibold))
-                .padding(.top, 4)
-
-                Spacer()
             }
-            .padding(24)
         }
-        .presentationDetents([.height(230)])
-        .preferredColorScheme(.dark)
     }
 }
 
@@ -338,19 +419,8 @@ struct CoverSheet: View {
     @State private var message = ""
 
     var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            VStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("设置封面")
-                        .font(Theme.serif(20, .semibold))
-                        .foregroundStyle(Theme.text)
-                    Text(collection.name)
-                        .font(Theme.serif(12))
-                        .foregroundStyle(Theme.muted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+        NavigationStack {
+            VStack(spacing: 18) {
                 Group {
                     if let ui = preview {
                         Image(uiImage: ui).resizable().scaledToFill()
@@ -359,44 +429,46 @@ struct CoverSheet: View {
                         Image(uiImage: ui).resizable().scaledToFill()
                     } else {
                         ZStack {
-                            Theme.coverFallback
+                            Theme.coverGradient(for: collection.id)
                             Text(String(collection.name.prefix(1)))
-                                .font(Theme.serif(64, .bold))
-                                .foregroundStyle(Theme.goldSoft.opacity(0.85))
+                                .font(Theme.serif(60, .bold))
+                                .foregroundStyle(.white.opacity(0.92))
                         }
                     }
                 }
-                .frame(width: 190, height: 190)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.gold.opacity(0.25), lineWidth: 1))
-                .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
+                .frame(width: 180, height: 180)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
 
                 PhotosPicker(selection: $pickedItem, matching: .images) {
                     Label("从相册选择图片", systemImage: "photo")
-                        .font(Theme.serif(14))
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.gold)
-                .foregroundStyle(Theme.ink)
 
-                if busy { ProgressView().tint(Theme.gold) }
+                if busy { ProgressView() }
 
                 if !message.isEmpty {
                     Text(message)
-                        .font(Theme.serif(11))
-                        .foregroundStyle(message.contains("已保存") ? Theme.gold : .red)
+                        .font(.system(size: 11))
+                        .foregroundStyle(message.contains("已保存") ? Theme.accent : .red)
                 }
 
                 Text("封面会保存到该合集的文件夹里，下次打开仍然有效。")
-                    .font(Theme.serif(10))
+                    .font(.system(size: 10))
                     .foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
 
                 Spacer()
             }
             .padding(24)
+            .navigationTitle("设置封面")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
         }
-        .preferredColorScheme(.dark)
         .onChange(of: pickedItem) { item in
             guard let item = item else { return }
             busy = true

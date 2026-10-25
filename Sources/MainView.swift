@@ -11,14 +11,14 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            Theme.background.ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Group {
                     if tab == .home {
                         HomeView(tab: $tab)
                     } else {
-                        NowPlayingView()
+                        NowPlayingView(tab: $tab)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -26,8 +26,7 @@ struct MainView: View {
                 BottomBar(tab: $tab)
             }
         }
-        .preferredColorScheme(.dark)
-        .tint(Theme.gold)
+        .tint(Theme.accent)
     }
 }
 
@@ -39,11 +38,11 @@ struct BottomBar: View {
             Button {
                 tab = .home
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     Image(systemName: "books.vertical.fill").font(.system(size: 19))
-                    Text("书架").font(Theme.serif(10))
+                    Text("书架").font(.system(size: 10))
                 }
-                .foregroundStyle(tab == .home ? Theme.gold : Theme.muted)
+                .foregroundStyle(tab == .home ? Theme.accent : Theme.muted)
             }
             .frame(maxWidth: .infinity)
 
@@ -57,9 +56,9 @@ struct BottomBar: View {
             Button {
                 openFilesApp()
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     Image(systemName: "square.and.arrow.down").font(.system(size: 19))
-                    Text("导入").font(Theme.serif(10))
+                    Text("导入").font(.system(size: 10))
                 }
                 .foregroundStyle(Theme.muted)
             }
@@ -67,10 +66,8 @@ struct BottomBar: View {
         }
         .padding(.top, 10)
         .padding(.bottom, 8)
-        .background(Theme.inkSoft.opacity(0.94))
-        .overlay(alignment: .top) {
-            Rectangle().fill(Theme.gold.opacity(0.14)).frame(height: 0.5)
-        }
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) { Divider() }
     }
 }
 
@@ -89,14 +86,11 @@ struct SpinningCover: View {
         ZStack {
             coverContent
 
-            Circle()
-                .stroke(Theme.gold.opacity(0.55), lineWidth: 1.2)
+            Circle().stroke(Theme.accent.opacity(0.6), lineWidth: 1.5)
 
-            Circle()
-                .fill(Theme.gold)
-                .frame(width: 5, height: 5)
+            Circle().fill(Theme.accent).frame(width: 5, height: 5)
         }
-        .frame(width: 48, height: 48)
+        .frame(width: 46, height: 46)
         .clipShape(Circle())
         .rotationEffect(.degrees(spin ? 360 : 0))
         .animation(spin ? Animation.linear(duration: 7).repeatForever(autoreverses: false) : .default, value: spin)
@@ -111,15 +105,15 @@ struct SpinningCover: View {
             Image(uiImage: ui).resizable().scaledToFill()
         } else if let c = currentCollection {
             ZStack {
-                Theme.surface
+                Theme.coverGradient(for: c.id)
                 Text(String(c.name.prefix(1)))
-                    .font(Theme.serif(18, .semibold))
-                    .foregroundStyle(Theme.goldSoft)
+                    .font(Theme.serif(18, .bold))
+                    .foregroundStyle(.white)
             }
         } else {
             ZStack {
-                Theme.surface
-                Image(systemName: "music.note").foregroundStyle(Theme.muted)
+                Theme.accentSoft
+                Image(systemName: "music.note").foregroundStyle(Theme.accent)
             }
         }
     }
