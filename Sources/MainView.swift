@@ -243,6 +243,13 @@ struct SettingsView: View {
                         Text("本地听书").foregroundStyle(.secondary)
                     }
                 }
+                Section("实验") {
+                    NavigationLink {
+                        WebImportTestView()
+                    } label: {
+                        Label("导入实验（WebView 文件选择）", systemImage: "testtube.2")
+                    }
+                }
                 Section {
                     Text("更多设置将在后续版本加入")
                         .foregroundStyle(.secondary)
