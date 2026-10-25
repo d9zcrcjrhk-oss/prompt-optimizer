@@ -484,7 +484,11 @@ final class LibraryModel: ObservableObject {
     func handleTrackFinished(_ track: Track) {
         let id = track.collectionKey
         var eps = loadWebEpisodes(id)
-        guard !eps.isEmpty, let idx = eps.firstIndex(where: { $0.name == track.name }) else { return }
+        guard !eps.isEmpty else { return }
+        let stem = track.name
+        guard let idx = eps.firstIndex(where: {
+            ($0.name as NSString).deletingPathExtension == stem
+        }) else { return }
 
         let dir = docs.appendingPathComponent(id, isDirectory: true)
         let next = idx + 2

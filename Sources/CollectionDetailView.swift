@@ -174,7 +174,9 @@ struct CollectionDetailView: View {
 
     private var pending: [WebEpisode] {
         let names = Set(collection.tracks.map { $0.name })
-        return library.loadWebEpisodes(collection.id).filter { !names.contains($0.name) }
+        return library.loadWebEpisodes(collection.id).filter {
+            !names.contains(($0.name as NSString).deletingPathExtension)
+        }
     }
 
     private var pendingSection: some View {
