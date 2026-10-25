@@ -113,7 +113,7 @@ struct SpinningCover: View {
     }
 
     private var currentCollection: Collection? {
-        guard !player.currentCollection.isEmpty else { return nil }
-        return library.collections.first { $0.name == player.currentCollection }
+        guard !player.currentCollectionKey.isEmpty else { return nil }
+        return library.collections.first { $0.id == player.currentCollectionKey }
     }
 }

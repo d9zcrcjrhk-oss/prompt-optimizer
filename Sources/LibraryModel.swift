@@ -23,15 +23,15 @@ func fmt(_ s: Double) -> String {
 struct Track: Identifiable, Hashable {
     let url: URL
     let name: String
-    let collection: String
+    let collectionKey: String
     var id: String { url.path }
 }
 
 struct Collection: Identifiable {
-    let name: String
+    let id: String          // 稳定 key（文件夹名 / __uncat__）
     let folderURL: URL?
+    let name: String        // 显示名（可被重命名覆盖）
     let tracks: [Track]
-    var id: String { name }
 }
 
 final class LibraryModel: ObservableObject {
@@ -39,24 +39,36 @@ final class LibraryModel: ObservableObject {
     @Published var lastTrack: Track?
     @Published var coverRevision = 0
 
+    private var nameOverrides: [String: String] = [:]
+
     let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+    init() {
+        nameOverrides = (UserDefaults.standard.dictionary(forKey: "nameOverrides") as? [String: String]) ?? [:]
+    }
 
     func scan() {
         var groups: [String: [Track]] = [:]
         var folders: [String: URL] = [:]
+        var defaultNames: [String: String] = [:]
 
         if let en = FileManager.default.enumerator(at: docs, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
             for case let u as URL in en {
                 guard audioExtensions.contains(u.pathExtension.lowercased()) else { continue }
                 let rel = u.path.replacingOccurrences(of: docs.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                 let parts = rel.components(separatedBy: "/")
+                let key: String
+                let dname: String
                 if parts.count > 1 {
-                    let col = parts[0]
-                    folders[col] = docs.appendingPathComponent(col)
-                    groups[col, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collection: col))
+                    key = parts[0]
+                    dname = parts[0]
+                    folders[key] = docs.appendingPathComponent(parts[0])
                 } else {
-                    groups["未归类", default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collection: "未归类"))
+                    key = "__uncat__"
+                    dname = "未归类"
                 }
+                groups[key, default: []].append(Track(url: u, name: u.deletingPathExtension().lastPathComponent, collectionKey: key))
+                defaultNames[key] = dname
             }
         }
 
@@ -67,7 +79,8 @@ final class LibraryModel: ObservableObject {
                 if na != nb { return na < nb }
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
             }
-            return Collection(name: key, folderURL: folders[key], tracks: sorted)
+            let display = nameOverrides[key] ?? defaultNames[key] ?? key
+            return Collection(id: key, folderURL: folders[key], name: display, tracks: sorted)
         }
         updateLastTrack()
     }
@@ -83,10 +96,13 @@ final class LibraryModel: ObservableObject {
     }
 
     func queue(for t: Track) -> [Track] {
-        collections.first { $0.name == t.collection }?.tracks ?? [t]
+        collections.first { $0.id == t.collectionKey }?.tracks ?? [t]
     }
 
-    /// 合集封面文件：<合集文件夹>/cover.jpg
+    func collection(forKey key: String) -> Collection? {
+        collections.first { $0.id == key }
+    }
+
     func coverURL(for c: Collection) -> URL? {
         let folder = c.folderURL ?? docs
         let u = folder.appendingPathComponent("cover.jpg")
@@ -96,27 +112,18 @@ final class LibraryModel: ObservableObject {
     func saveCover(_ data: Data, for c: Collection) {
         let folder = c.folderURL ?? docs
         let u = folder.appendingPathComponent("cover.jpg")
-        do {
-            try data.write(to: u)
-            coverRevision += 1
-        } catch {
-            coverRevision += 1
-        }
+        try? data.write(to: u)
+        coverRevision += 1
     }
 
-    /// 重命名合集 = 重命名它的物理文件夹（封面会跟着走）
+    /// 重命名 = 存显示名映射（文件夹不动，绝不失败）
     @discardableResult
     func renameCollection(_ c: Collection, to newName: String) -> Bool {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != c.name, let old = c.folderURL else { return false }
-        let new = old.deletingLastPathComponent().appendingPathComponent(trimmed)
-        guard !FileManager.default.fileExists(atPath: new.path) else { return false }
-        do {
-            try FileManager.default.moveItem(at: old, to: new)
-            scan()
-            return true
-        } catch {
-            return false
-        }
+        guard !trimmed.isEmpty else { return false }
+        nameOverrides[c.id] = trimmed
+        UserDefaults.standard.set(nameOverrides, forKey: "nameOverrides")
+        scan()
+        return true
     }
 }

@@ -2,11 +2,22 @@ import SwiftUI
 import UIKit
 import PhotosUI
 
+enum HomeSheet: Identifiable {
+    case rename(Collection)
+    case cover(Collection)
+
+    var id: String {
+        switch self {
+        case .rename(let c): return "rename-\(c.id)"
+        case .cover(let c): return "cover-\(c.id)"
+        }
+    }
+}
+
 struct HomeView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
-    @State private var renameTarget: Collection?
-    @State private var coverTarget: Collection?
+    @State private var sheet: HomeSheet?
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -54,12 +65,12 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button {
-                                        renameTarget = c
+                                        sheet = .rename(c)
                                     } label: {
                                         Label("重命名", systemImage: "pencil")
                                     }
                                     Button {
-                                        coverTarget = c
+                                        sheet = .cover(c)
                                     } label: {
                                         Label("设置封面", systemImage: "photo")
                                     }
@@ -82,11 +93,13 @@ struct HomeView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("本地听书")
-            .sheet(item: $renameTarget) { c in
-                RenameSheet(collection: c).environmentObject(library)
-            }
-            .sheet(item: $coverTarget) { c in
-                CoverSheet(collection: c).environmentObject(library)
+            .sheet(item: $sheet) { s in
+                switch s {
+                case .rename(let c):
+                    RenameSheet(collection: c).environmentObject(library)
+                case .cover(let c):
+                    CoverSheet(collection: c).environmentObject(library)
+                }
             }
             .task { library.scan() }
         }
@@ -97,6 +110,10 @@ struct HeroCard: View {
     let last: Track
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
+
+    private var collectionName: String {
+        library.collection(forKey: last.collectionKey)?.name ?? "—"
+    }
 
     var body: some View {
         Button {
@@ -109,7 +126,7 @@ struct HeroCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("继续上次").font(.caption).foregroundStyle(.white.opacity(0.8))
                     Text(last.name).font(.headline).foregroundStyle(.white).lineLimit(1)
-                    Text(last.collection).font(.caption2).foregroundStyle(.white.opacity(0.75))
+                    Text(collectionName).font(.caption2).foregroundStyle(.white.opacity(0.75))
                 }
                 Spacer()
             }
@@ -192,7 +209,8 @@ struct RenameSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        if library.renameCollection(collection, to: name) { dismiss() }
+                        _ = library.renameCollection(collection, to: name)
+                        dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -208,6 +226,7 @@ struct CoverSheet: View {
     @State private var pickedItem: PhotosPickerItem?
     @State private var preview: UIImage?
     @State private var busy = false
+    @State private var message = ""
 
     var body: some View {
         NavigationStack {
@@ -234,12 +253,20 @@ struct CoverSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 20))
                 .shadow(color: Color.black.opacity(0.2), radius: 10, y: 6)
 
-                PhotosPicker(selection: $pickedItem, matching: .images, photoLibrary: .shared()) {
+                PhotosPicker(selection: $pickedItem, matching: .images) {
                     Label("从相册选择图片", systemImage: "photo")
                 }
                 .buttonStyle(.borderedProminent)
 
                 if busy { ProgressView() }
+
+                if !message.isEmpty {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
 
                 Text("封面会保存到该合集的文件夹里，下次打开仍然有效。")
                     .font(.caption2)
@@ -259,12 +286,21 @@ struct CoverSheet: View {
         .onChange(of: pickedItem) { item in
             guard let item = item else { return }
             busy = true
+            message = ""
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let ui = UIImage(data: data) {
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self),
+                          let ui = UIImage(data: data) else {
+                        message = "读取图片失败，请换一张试试"
+                        busy = false
+                        return
+                    }
                     preview = ui
                     let jpeg = ui.jpegData(compressionQuality: 0.85) ?? data
                     library.saveCover(jpeg, for: collection)
+                    message = "封面已保存"
+                } catch {
+                    message = "出错：\(error.localizedDescription)"
                 }
                 busy = false
             }

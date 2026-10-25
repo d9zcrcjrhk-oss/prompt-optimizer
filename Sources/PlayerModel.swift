@@ -9,7 +9,7 @@ final class PlayerModel: ObservableObject {
     @Published var current: Double = 0
     @Published var duration: Double = 0
     @Published var rate: Float = 1.0
-    @Published var currentCollection = ""
+    @Published var currentCollectionKey = ""
     @Published var sleepMode: SleepMode = .none
     @Published var sleepRemaining: Int = 0
 
@@ -46,7 +46,7 @@ final class PlayerModel: ObservableObject {
         clear()
         currentURL = track.url
         title = track.name
-        currentCollection = track.collection
+        currentCollectionKey = track.collectionKey
         let item = AVPlayerItem(url: track.url)
         player = AVPlayer(playerItem: item)
         addTimeObserver()

@@ -14,7 +14,7 @@ struct NowPlayingView: View {
                     Text(player.title.isEmpty ? "未播放" : player.title)
                         .font(.headline)
                         .lineLimit(1)
-                    Text(player.currentCollection.isEmpty ? "—" : player.currentCollection)
+                    Text(collectionName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -84,7 +84,9 @@ struct NowPlayingView: View {
             .padding(.vertical, 18)
         }
         .sheet(isPresented: $showTools) {
-            PlayerToolsSheet().environmentObject(player)
+            PlayerToolsSheet()
+                .environmentObject(player)
+                .environmentObject(library)
         }
     }
 
@@ -109,19 +111,23 @@ struct NowPlayingView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
+    private var collection: Collection? {
+        library.collection(forKey: player.currentCollectionKey)
+    }
+
+    private var collectionName: String {
+        collection?.name ?? "—"
+    }
+
     private var firstChar: String {
         guard let c = collection else { return "♪" }
         return String(c.name.prefix(1))
-    }
-
-    private var collection: Collection? {
-        guard !player.currentCollection.isEmpty else { return nil }
-        return library.collections.first { $0.name == player.currentCollection }
     }
 }
 
 struct PlayerToolsSheet: View {
     @EnvironmentObject var player: PlayerModel
+    @EnvironmentObject var library: LibraryModel
     @Environment(\.dismiss) private var dismiss
     @State private var sleepMode = 0
     @State private var sleepMinutes = 30
@@ -129,7 +135,7 @@ struct PlayerToolsSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section("倍速") {
                     Picker("倍速", selection: Binding(
                         get: { player.rate },
@@ -165,6 +171,29 @@ struct PlayerToolsSheet: View {
                         Button("取消定时", role: .destructive) { player.cancelSleep() }
                     }
                 }
+
+                if let c = currentCollection {
+                    Section("选集（\(c.tracks.count) 集）") {
+                        ForEach(c.tracks) { t in
+                            Button {
+                                player.play(t, queue: c.tracks)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text("\(episodeNumber(t.name) ?? 0)")
+                                        .frame(width: 30)
+                                        .foregroundStyle(.secondary)
+                                    Text(t.name).lineLimit(1)
+                                    Spacer()
+                                    if player.title == t.name {
+                                        Image(systemName: "speaker.wave.2.fill")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("播放设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -174,6 +203,10 @@ struct PlayerToolsSheet: View {
                 }
             }
         }
+    }
+
+    private var currentCollection: Collection? {
+        library.collection(forKey: player.currentCollectionKey)
     }
 
     private var sleepStatus: String {
