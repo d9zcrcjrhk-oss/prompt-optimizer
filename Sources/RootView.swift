@@ -90,6 +90,19 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, 20)
 
+                    Button {
+                        DocumentBrowser.shared.present { urls in
+                            if urls.isEmpty {
+                                library.importStatus = "未选择文件"
+                            } else {
+                                library.importFiles(urls)
+                            }
+                        }
+                    } label: {
+                        Label("浏览 U 盘文件（直读，不复制）", systemImage: "doc.text.magnifyingglass")
+                    }
+                    .padding(.horizontal, 20)
+
                     Text("把音频文件夹放进：文件 App → 我的 iPhone → 本地听书，再点「重新扫描」。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
