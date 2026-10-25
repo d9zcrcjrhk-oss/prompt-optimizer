@@ -43,7 +43,9 @@ final class WebSource: NSObject, ObservableObject, WKScriptMessageHandler {
         curReceived = 0
         curProgress = progress
         curCompletion = completion
-        w.evaluateJavaScript("window.startRead(\(index));", completionHandler: nil)
+        DispatchQueue.main.async {
+            w.evaluateJavaScript("window.startRead(\(index));", completionHandler: nil)
+        }
     }
 
     func userContentController(_ userContentController: WKUserContentController,
@@ -157,17 +159,13 @@ struct WebImportView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if ws.files.isEmpty {
-                    VStack(spacing: 0) {
-                        WebSourceWebView(web: ws.ensureWebView())
-                        Text("选完后会先建合集，只下载前 2 集")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .padding(8)
-                    }
-                } else {
+            ZStack {
+                WebSourceWebView(web: ws.ensureWebView())
+                    .ignoresSafeArea()
+
+                if !ws.files.isEmpty {
                     chooser
+                        .background(Color.black)
                 }
             }
             .background(Color.black)
@@ -312,7 +310,9 @@ struct WebImportView: View {
                     }
                 }
             }
-            download(index: index + 1, count: count, id: id, dir: dir, lazy: lazy)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                download(index: index + 1, count: count, id: id, dir: dir, lazy: lazy)
+            }
         }
     }
 }
