@@ -12,16 +12,26 @@ struct MainView: View {
     @EnvironmentObject var player: PlayerModel
     @EnvironmentObject var library: LibraryModel
 
+    private var debugScreen: String? {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-uiScreen"), i + 1 < args.count {
+            return args[i + 1]
+        }
+        return nil
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            if tab == .playing {
+            if tab == .playing || debugScreen == "player" || debugScreen == "episodes" {
                 NowPlayingBackdrop()
             } else {
                 Color.black.ignoresSafeArea()
             }
 
             Group {
-                if tab == .home {
+                if let screen = debugScreen {
+                    debugContent(screen)
+                } else if tab == .home {
                     HomeView(tab: $tab)
                 } else {
                     NowPlayingView(tab: $tab)
@@ -29,7 +39,7 @@ struct MainView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if tab == .home {
+            if debugScreen == nil && tab == .home {
                 VStack(spacing: 10) {
                     if player.hasTrack {
                         MiniPlayerBar {
@@ -55,6 +65,34 @@ struct MainView: View {
             player.queueProvider = { key in
                 library.collection(forKey: key)?.tracks ?? []
             }
+            library.scan()
+            if debugScreen == "player", !library.collections.isEmpty {
+                let c = library.collections[0]
+                if let first = c.tracks.first {
+                    player.play(first, queue: c.tracks)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func debugContent(_ screen: String) -> some View {
+        switch screen {
+        case "player":
+            NowPlayingView(tab: $tab)
+        case "episodes":
+            if let c = library.collections.first {
+                EpisodeSheet(collection: c)
+            } else {
+                Color.black
+            }
+        case "collection":
+            if let c = library.collections.first {
+                CollectionDetailView(collection: c)
+            } else {
+                Color.black
+            }
+        default:
+            HomeView(tab: $tab)
         }
     }
 }

@@ -1,0 +1,70 @@
+name: screenshots
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build for simulator
+        run: |
+          xcodebuild -project AudiobookPlayer.xcodeproj -scheme AudiobookPlayer \
+            -sdk iphonesimulator -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+
+      - name: Boot simulator & seed sample audio
+        run: |
+          set -e
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 16 (" | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
+          echo "device=$DEVICE"
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find build -name "AudiobookPlayer.app" -type d | head -1)
+          echo "app=$APP"
+          xcrun simctl install "$DEVICE" "$APP"
+          DATA=$(xcrun simctl get_app_container "$DEVICE" com.local.audiobook.player data)
+          echo "data=$DATA"
+          mkdir -p "$DATA/Documents/测试合集"
+          DATA="$DATA" python3 - <<'PY'
+          import os, wave
+          base = os.path.join(os.environ['DATA'], 'Documents', '测试合集')
+          names = ['测试 01 开端', '测试 02 深入', '测试 03 真相']
+          for i, n in enumerate(names, start=1):
+              p = os.path.join(base, f'{n}.wav')
+              with wave.open(p, 'w') as w:
+                  w.setnchannels(1)
+                  w.setsampwidth(2)
+                  w.setframerate(8000)
+                  w.writeframes(b'\x00\x00' * 8000 * 2)
+          print('seeded', len(names))
+          PY
+
+      - name: Capture screenshots
+        run: |
+          set -e
+          DEVICE=$(xcrun simctl list devices available | grep -m1 "iPhone 16 (" | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
+          for s in home player collection episodes; do
+            xcrun simctl terminate "$DEVICE" com.local.audiobook.player 2>/dev/null || true
+            xcrun simctl launch "$DEVICE" com.local.audiobook.player -uiScreen "$s" || true
+            sleep 4
+            xcrun simctl io "$DEVICE" screenshot "$s.png" || true
+          done
+          ls -la *.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: "*.png"
+          if-no-files-found: warn
