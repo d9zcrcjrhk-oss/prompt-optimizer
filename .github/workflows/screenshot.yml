@@ -1,11 +1,11 @@
-name: screenshots
+﻿name: screenshots
 
 on:
   workflow_dispatch:
 
 jobs:
   shots:
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -66,3 +66,4 @@ jobs:
           name: screenshots
           path: "*.png"
           if-no-files-found: warn
+
